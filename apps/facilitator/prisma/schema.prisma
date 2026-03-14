@@ -1,0 +1,29 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+model PendingBroadcast {
+  id                String   @id @default(cuid())
+  paymentHash       String   @unique
+  preimage          String   // hex-encoded 32-byte preimage known to facilitator
+  invoice           String   // BOLT-11 invoice string
+  payloadHex        String   // v0: ORS payload hex; v1: unused (empty string)
+  chunksJson        String?  // v1: JSON array of OP_RETURN chunk hex strings
+  protocolVersion   Int      @default(0)  // 0 or 1; app always passes explicitly; 0 = safe backfill for pre-migration rows
+  estimatedFeeSats  Int      // estimated on-chain fee in satoshis
+  feeRateBtcPerKb   Float    // fee rate used for estimation (BTC/kB)
+  txid              String?  // set after broadcast (canonical = chunk 0 txid for v1)
+  chunkTxids        String?  // v1: JSON array of all chunk txids after broadcast
+  invoiceSats       Int      // LN invoice amount (fee + markup)
+  broadcast         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  expiresAt         DateTime
+  action            String   // "post" | "reply" | "repost" | "quote-repost" | "follow" | "profile"
+  requestJson       String   // original request body as JSON (for cache notification after broadcast)
+}

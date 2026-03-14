@@ -1,0 +1,61 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+model Post {
+  txid        String  @id
+  blockHeight Int
+  timestamp   Int
+  content     String
+  kind        Int     @default(1)
+  pubkey      String
+  sig         String
+  parentTxid  String?
+  status      String  @default("confirmed")
+}
+
+model ScannerState {
+  id        Int @id @default(1)
+  lastBlock Int @default(0)
+}
+
+model Profile {
+  pubkey    String  @id
+  name      String?
+  bio       String?
+  avatarUrl String?
+  status    String  @default("confirmed")
+}
+
+model Follow {
+  followerPubkey String
+  followeePubkey String
+  txid           String
+  timestamp      Int
+  blockHeight    Int
+  isFollow       Boolean
+  status         String  @default("confirmed")
+
+  @@id([followerPubkey, followeePubkey])
+}
+
+model ScannedBlock {
+  height Int    @id
+  hash   String
+}
+
+model PendingChunk {
+  id          Int     @id @default(autoincrement())
+  txid        String  @unique
+  chunkNum    Int
+  totalChunks Int?    // only set for chunkNum == 0
+  bodySlice   String  // hex-encoded body slice
+  blockHeight Int
+  timestamp   Int     // block timestamp (unix)
+}

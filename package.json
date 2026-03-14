@@ -1,0 +1,22 @@
+{
+  "name": "opreturn.social",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:cache": "yarn workspace @ors/cache-server dev",
+    "dev:facilitator": "yarn workspace @ors/facilitator dev",
+    "dev:frontend": "yarn workspace @ors/frontend dev",
+    "build:protocol": "yarn workspace @ors/protocol build",
+    "build:cache": "yarn workspace @ors/cache-server build",
+    "build:facilitator": "yarn workspace @ors/facilitator build",
+    "build:frontend": "yarn workspace @ors/frontend build",
+    "build": "yarn build:protocol && yarn build:cache && yarn build:facilitator && yarn build:frontend",
+    "typecheck": "yarn build:protocol && yarn workspace @ors/cache-server typecheck && yarn workspace @ors/facilitator typecheck && yarn workspace @ors/frontend typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

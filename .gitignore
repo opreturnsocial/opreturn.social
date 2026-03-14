@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+*.db
+*.db*
+tsconfig.tsbuildinfo
+.agents
+apps/*/generated/

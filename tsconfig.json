@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/protocol" },
+    { "path": "apps/cache-server" },
+    { "path": "apps/facilitator" },
+    { "path": "apps/frontend" }
+  ]
+}
