@@ -483,11 +483,7 @@ async function runScanCycle(): Promise<void> {
     const tip = await getBlockCount();
     for (let height = lastBlock + 1; height <= tip; height++) {
       await scanBlock(height);
-    }
-    // Attempt to assemble any pending v1 chunks
-    const currentHeight = await getBlockCount();
-    if (currentHeight > 0) {
-      await assembleV1Chunks(currentHeight);
+      await assembleV1Chunks(height);
     }
     await checkMempoolEvictions();
   } catch (err) {
