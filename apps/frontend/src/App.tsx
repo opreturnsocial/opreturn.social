@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 
 function TxRedirect() {
   const { txid } = useParams<{ txid: string }>();
@@ -16,7 +22,13 @@ import { AuthPage } from "./pages/AuthPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { useFeed } from "./hooks/useFeed";
 import { useWalletBalance } from "./hooks/useWalletBalance";
-import { fetchProfiles, fetchFollows, fetchNoteOgRanks, fetchActivity } from "./api/cache";
+import {
+  fetchProfiles,
+  fetchFollows,
+  fetchNoteOgRanks,
+  fetchActivity,
+} from "./api/cache";
+import { getNostrExtPubkey } from "./lib/nostr";
 import type { Profile, ActivityItem } from "./types";
 import {
   Dialog,
@@ -114,8 +126,8 @@ export function App() {
   }, [loggedInPubkey]);
 
   async function handleLogin(): Promise<string | null> {
-    if (!window.nostr) return null;
-    const pubkey = await window.nostr.getPublicKey();
+    const pubkey = await getNostrExtPubkey();
+    if (!pubkey) return null;
     setLoggedInPubkey(pubkey);
     localStorage.setItem("ors_pubkey", pubkey);
     refreshFollows(pubkey);
@@ -199,7 +211,7 @@ export function App() {
                   loggedInPubkey ? () => setFundWalletOpen(true) : undefined
                 }
               />
-              {loggedInPubkey && !walletFunded && (
+              {loggedInPubkey && !walletFunded && !(window as any).webln && (
                 <div className="bg-orange-50 border-b border-orange-200 px-4 py-2.5 flex items-center justify-center gap-3 text-sm text-orange-800">
                   <span>
                     Your wallet isn't funded yet - you won't be able to post.
@@ -282,7 +294,9 @@ export function App() {
                 <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto overflow-x-hidden">
                   <DialogHeader>
                     <DialogTitle>Fund your wallet</DialogTitle>
-                    {localStorage.getItem("ors_nwc_url")?.includes("lncurl") && (
+                    {localStorage
+                      .getItem("ors_nwc_url")
+                      ?.includes("lncurl") && (
                       <DialogDescription>
                         <div className="text-xs text-muted-foreground">
                           Powered by{" "}

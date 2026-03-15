@@ -10,7 +10,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { LogoIcon } from "@/icons/LogoIcon";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -18,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
 import { WalletFundingView } from "@/components/WalletFundingView";
 import { NWCClient } from "@getalby/sdk/nwc";
+import { getNostrExtPubkey } from "@/lib/nostr";
 
 type AuthStep =
   | "landing"
@@ -45,17 +45,10 @@ export function AuthPage({
   const [nwcBalance, setNwcBalance] = useState(0);
 
   async function handleNostrExtPubkey() {
-    if (!window.nostr) {
-      toast.error("No Nostr extension found.");
-      return;
-    }
-    try {
-      const pubkey = await window.nostr.getPublicKey();
-      localStorage.setItem("ors_pubkey", pubkey);
-      setStep("wallet-choice");
-    } catch {
-      toast.error("Failed to get public key from extension.");
-    }
+    const pubkey = await getNostrExtPubkey();
+    if (!pubkey) return;
+    localStorage.setItem("ors_pubkey", pubkey);
+    setStep("wallet-choice");
   }
 
   if (step === "landing") {
