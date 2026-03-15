@@ -2,7 +2,7 @@
 
 ## Context
 
-Deploy the three ORS services (cache-server, facilitator, frontend) to a VPS that already runs Bitcoin Core (IBD complete) and Caddy. The backend services run as systemd units from `/opt/ors-mvp`. The frontend is served as static files by Caddy. Three subdomains route traffic.
+Deploy the three ORS services (cache-server, facilitator, frontend) to a VPS that already runs Bitcoin Core (IBD complete) and Caddy. The backend services run as systemd units from `/opt/opreturn.social`. The frontend is served as static files by Caddy. Three subdomains route traffic.
 
 **Assumed subdomains** (replace `example.com` throughout):
 
@@ -42,9 +42,9 @@ The facilitator collects sats via a hold invoice. You need a **Nostr Wallet Conn
 ## Phase 2 - Clone and Build
 
 ```bash
-sudo mkdir -p /opt/ors-mvp
-sudo chown $USER:$USER /opt/ors-mvp
-cd /opt/ors-mvp
+sudo mkdir -p /opt/opreturn.social
+sudo chown $USER:$USER /opt/opreturn.social
+cd /opt/opreturn.social
 git clone <your-github-repo-url> .
 ```
 
@@ -63,7 +63,7 @@ BITCOIN_RPC_HOST=127.0.0.1
 BITCOIN_RPC_PORT=8332          # mainnet port (not 18443)
 BITCOIN_RPC_USER=<your-rpc-user>
 BITCOIN_RPC_PASS=<your-rpc-pass>
-DATABASE_URL=file:/opt/ors-mvp/apps/cache-server/data/prod.db
+DATABASE_URL=file:/opt/opreturn.social/apps/cache-server/data/prod.db
 CACHE_SERVER_PORT=3001
 ```
 
@@ -83,7 +83,7 @@ BITCOIN_RPC_PASS=<your-rpc-pass>
 BITCOIN_RPC_WALLET=ors-facilitator
 CACHE_SERVER_URL=http://localhost:3001
 FACILITATOR_PORT=3002
-DATABASE_URL=file:/opt/ors-mvp/apps/facilitator/data/prod.db
+DATABASE_URL=file:/opt/opreturn.social/apps/facilitator/data/prod.db
 NWC_URL=<your-nwc-url>
 FEE_MARKUP_PERCENT=10
 INVOICE_EXPIRY_SECS=600
@@ -119,11 +119,11 @@ yarn install
 ### 2.4 Database setup
 
 ```bash
-cd /opt/ors-mvp/apps/cache-server
+cd /opt/opreturn.social/apps/cache-server
 yarn db:generate
 yarn db:migrate:prod
 
-cd /opt/ors-mvp/apps/facilitator
+cd /opt/opreturn.social/apps/facilitator
 yarn db:generate
 yarn db:migrate:prod
 ```
@@ -149,11 +149,11 @@ After=network.target
 [Service]
 Type=simple
 User=$USER
-WorkingDirectory=/opt/ors-mvp/apps/cache-server
-ExecStart=/usr/bin/node /opt/ors-mvp/apps/cache-server/dist/index.js
+WorkingDirectory=/opt/opreturn.social/apps/cache-server
+ExecStart=/usr/bin/node /opt/opreturn.social/apps/cache-server/dist/index.js
 Restart=on-failure
 RestartSec=5
-EnvironmentFile=/opt/ors-mvp/apps/cache-server/.env
+EnvironmentFile=/opt/opreturn.social/apps/cache-server/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -171,11 +171,11 @@ After=network.target ors-cache.service
 [Service]
 Type=simple
 User=$USER
-WorkingDirectory=/opt/ors-mvp/apps/facilitator
-ExecStart=/usr/bin/node /opt/ors-mvp/apps/facilitator/dist/index.js
+WorkingDirectory=/opt/opreturn.social/apps/facilitator
+ExecStart=/usr/bin/node /opt/opreturn.social/apps/facilitator/dist/index.js
 Restart=on-failure
 RestartSec=5
-EnvironmentFile=/opt/ors-mvp/apps/facilitator/.env
+EnvironmentFile=/opt/opreturn.social/apps/facilitator/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -207,7 +207,7 @@ Add a new file (or append to existing Caddyfile). Caddy will auto-provision TLS.
 ```caddy
 # Frontend - static SPA
 ors.example.com {
-    root * /opt/ors-mvp/apps/frontend/dist
+    root * /opt/opreturn.social/apps/frontend/dist
     try_files {path} /index.html
     file_server
 }
@@ -255,7 +255,7 @@ Add DNS A records (or CNAME to your existing domain) for:
 ## Updates / Redeployment
 
 ```bash
-cd /opt/ors-mvp
+cd /opt/opreturn.social
 git pull
 yarn install
 yarn build:protocol

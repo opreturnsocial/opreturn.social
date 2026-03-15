@@ -112,18 +112,22 @@ See [ORS](https://github.com/opreturnsocial/ors) base protocol and [ORK](https:/
 ### ORS Wire Formats
 
 **v0 (single OP_RETURN):**
+
 ```
 ORS\x00 + pubkey(32) + sig(64) + kind(1) + kind_data
 ```
+
 Minimum 102 bytes. Most miners reject payloads >80 bytes.
 Signing: `sha256(ORS\x00 || pubkey || kind || kind_data)`
 
 **v1 (chunked 80-byte OP_RETURN):**
+
 ```
 Chunk 0: ORS(3) | 0x01(1) | 0x00(1) | total_chunks(1) | body[0:74]   (80 bytes max)
 Chunk N: ORS(3) | 0x01(1) | N(1)    | body[74+(N-1)*75:74+N*75]      (80 bytes max)
 body = pubkey(32) + sig(64) + kind(1) + kind_data
 ```
+
 Signing: `sha256(pubkey || kind || kind_data)` (no magic prefix)
 Canonical post id = chunk 0 txid. Each chunk is a separate bitcoin transaction.
 
@@ -142,14 +146,14 @@ Frontend reads `localStorage.ors_protocol_version` (default `"1"`). All write re
 
 ### Post Kinds
 
-| Hex  | Name           | Description                        |
-|------|----------------|------------------------------------|
-| 0x01 | TEXT_NOTE      | Plain text post                    |
-| 0x02 | PROFILE_UPDATE | Update display name, bio, etc.     |
-| 0x03 | TEXT_REPLY     | Reply to another post (by txid)    |
-| 0x04 | REPOST         | Repost another post (by txid)      |
-| 0x05 | QUOTE_REPOST   | Quote repost with comment          |
-| 0x06 | FOLLOW         | Follow a pubkey                    |
+| Hex  | Name           | Description                     |
+| ---- | -------------- | ------------------------------- |
+| 0x01 | TEXT_NOTE      | Plain text post                 |
+| 0x02 | PROFILE_UPDATE | Update display name, bio, etc.  |
+| 0x03 | TEXT_REPLY     | Reply to another post (by txid) |
+| 0x04 | REPOST         | Repost another post (by txid)   |
+| 0x05 | QUOTE_REPOST   | Quote repost with comment       |
+| 0x06 | FOLLOW         | Follow a pubkey                 |
 
 ### JSON Structure (stored in cache)
 
@@ -187,7 +191,7 @@ Frontend reads `localStorage.ors_protocol_version` (default `"1"`). All write re
 ## File Structure
 
 ```
-ors-mvp/
+opreturn.social/
 ├── docs/
 │   ├── architecture.md                  # This file
 │   ├── cache-server.md                # Caching specifics
