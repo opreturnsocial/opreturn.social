@@ -45,6 +45,16 @@ model Follow {
   @@id([followerPubkey, followeePubkey])
 }
 
+model ProfileUpdateEvent {
+  txid         String @id
+  pubkey       String
+  propertyKind Int
+  value        String
+  blockHeight  Int
+  timestamp    Int
+  status       String @default("confirmed")
+}
+
 model ScannedBlock {
   height Int    @id
   hash   String

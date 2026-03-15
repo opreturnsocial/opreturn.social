@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import { RepostModal } from "./RepostModal";
 import { formatRelativeTime } from "../lib/utils";
 import { KIND_TEXT_NOTE, KIND_TEXT_REPLY, KIND_QUOTE_REPOST } from "../lib/ors";
-import type { Post, Profile } from "../types";
+import type { Post, Profile, ActivityItem } from "../types";
 
 type NoteOgEntry = {
   txid: string;
@@ -44,6 +44,7 @@ interface PostCardProps {
   profile?: Profile;
   parentPost?: Post | null;
   parentProfile?: Profile;
+  parentActivity?: ActivityItem | null;
   hideReplyHeader?: boolean;
   replyCount?: number;
   repostCount?: number;
@@ -84,6 +85,7 @@ export function PostCard({
   profile,
   parentPost,
   parentProfile,
+  parentActivity,
   hideReplyHeader,
   replyCount,
   repostCount,
@@ -103,7 +105,7 @@ export function PostCard({
   return (
     <Card
       className="w-full cursor-pointer hover:bg-accent/30 transition-colors border-[1px] border-b-0"
-      onClick={() => navigate(`/post/${post.txid}`)}
+      onClick={() => navigate(`/tx/${post.txid}`)}
     >
       <CardContent className="pt-4">
         {!hideReplyHeader && post.kind === KIND_TEXT_REPLY && post.parentTxid && (
@@ -111,7 +113,7 @@ export function PostCard({
             className="flex items-center gap-1 text-xs text-muted-foreground mb-2 hover:text-foreground transition-colors cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/post/${post.parentTxid}`);
+              navigate(`/tx/${post.parentTxid}`);
             }}
           >
             <CornerUpLeft className="h-3 w-3 shrink-0" />
@@ -138,6 +140,27 @@ export function PostCard({
                     : parentPost.content}
                 </span>
               </span>
+            ) : parentActivity ? (
+              (() => {
+                const actProfile = allProfiles?.[parentActivity.pubkey];
+                const actName = actProfile?.name ?? `${parentActivity.pubkey.slice(0, 8)}…`;
+                return (
+                  <span className="flex items-center gap-1 truncate">
+                    {actProfile?.avatarUrl ? (
+                      <img
+                        src={actProfile.avatarUrl}
+                        alt={actName}
+                        className="h-4 w-4 rounded-full object-cover border border-border shrink-0"
+                      />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full bg-orange-500 flex items-center justify-center text-white shrink-0" style={{ fontSize: "8px", fontWeight: "bold" }}>
+                        {actName.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="font-medium">{actName}</span>
+                  </span>
+                );
+              })()
             ) : (
               <span>
                 Replied to{" "}
@@ -225,7 +248,7 @@ export function PostCard({
               className="mt-3 rounded-md border p-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(`/post/${parentPost.txid}`);
+                navigate(`/tx/${parentPost.txid}`);
               }}
             >
               <div
@@ -255,7 +278,7 @@ export function PostCard({
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(`/post/${post.txid}`);
+                navigate(`/tx/${post.txid}`);
               }}
             >
               <MessageCircle className="h-3.5 w-3.5" />
@@ -276,7 +299,7 @@ export function PostCard({
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             onClick={async (e) => {
               e.stopPropagation();
-              const url = `${window.location.origin}/post/${post.txid}`;
+              const url = `${window.location.origin}/tx/${post.txid}`;
               if (navigator.share) {
                 await navigator.share({ title: "ORS Note", url });
               } else {
@@ -293,7 +316,8 @@ export function PostCard({
         open={repostOpen}
         onOpenChange={setRepostOpen}
         onReposted={() => onRefresh?.()}
-        post={post}
+        txid={post.txid}
+        displayContent={post.content}
         loggedInPubkey={loggedInPubkey ?? null}
       />
       <Dialog open={noteLeaderboardOpen} onOpenChange={setNoteLeaderboardOpen}>
@@ -313,7 +337,7 @@ export function PostCard({
                 return (
                   <Link
                     key={entry.txid}
-                    to={`/post/${entry.txid}`}
+                    to={`/tx/${entry.txid}`}
                     className="flex items-center gap-3 hover:bg-muted rounded-md p-2 transition-colors"
                     onClick={() => setNoteLeaderboardOpen(false)}
                   >

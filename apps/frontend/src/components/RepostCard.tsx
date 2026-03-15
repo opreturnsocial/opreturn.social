@@ -33,9 +33,9 @@ export function RepostCard({
       className="w-full cursor-pointer hover:bg-accent/30 transition-colors border-[1px] border-b-0"
       onClick={() => {
         if (repost.kind === KIND_QUOTE_REPOST) {
-          navigate(`/post/${repost.txid}`);
+          navigate(`/tx/${repost.txid}`);
         } else if (originalPost) {
-          navigate(`/post/${originalPost.txid}`);
+          navigate(`/tx/${originalPost.txid}`);
         }
       }}
     >
@@ -65,7 +65,7 @@ export function RepostCard({
             className="rounded-md border p-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/post/${originalPost.txid}`);
+              navigate(`/tx/${originalPost.txid}`);
             }}
           >
             <div

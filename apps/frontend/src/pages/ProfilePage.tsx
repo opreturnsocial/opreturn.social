@@ -32,11 +32,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PostCard } from "../components/PostCard";
 import { RepostCard } from "../components/RepostCard";
+import { ActivityCard } from "../components/ActivityCard";
 import {
   fetchPosts,
   fetchFollows,
   fetchFollowers,
   fetchOgLeaderboard,
+  fetchActivity,
 } from "../api/cache";
 import type { FollowRecord } from "../api/cache";
 import { submitFollow } from "../api/facilitator";
@@ -52,12 +54,13 @@ import {
 } from "../lib/ors";
 import { getFeeBumpSatPerVByte } from "../lib/fees";
 import { signPayload } from "../lib/signing";
-import type { Post, Profile } from "../types";
+import type { Post, Profile, ActivityItem } from "../types";
 import { nip19 } from "nostr-tools";
 
 interface ProfilePageProps {
   profiles: Record<string, Profile>;
   allPosts: Post[];
+  allActivityItems?: ActivityItem[];
   loggedInPubkey?: string | null;
   followedPubkeys?: Set<string>;
   pendingFollowPubkeys?: Set<string>;
@@ -74,6 +77,7 @@ interface ProfilePageProps {
 export function ProfilePage({
   profiles,
   allPosts,
+  allActivityItems,
   loggedInPubkey,
   followedPubkeys,
   pendingFollowPubkeys,
@@ -83,6 +87,7 @@ export function ProfilePage({
   const { pubkey } = useParams<{ pubkey: string }>();
   const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [profileActivity, setProfileActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [followingPubkeys, setFollowingPubkeys] = useState<string[]>([]);
   const [followerPubkeys, setFollowerPubkeys] = useState<string[]>([]);
@@ -117,13 +122,15 @@ export function ProfilePage({
   const load = useCallback(async () => {
     if (!pubkey) return;
     try {
-      const [data, followsData, followers, ogData] = await Promise.all([
+      const [data, followsData, followers, ogData, activity] = await Promise.all([
         fetchPosts(50, 0, pubkey),
         fetchFollows(pubkey),
         fetchFollowers(pubkey),
         fetchOgLeaderboard(),
+        fetchActivity(50, 0, pubkey),
       ]);
       setPosts(data);
+      setProfileActivity(activity);
       setFollowingPubkeys([
         ...followsData.pubkeys,
         ...followsData.pendingPubkeys,
@@ -272,7 +279,7 @@ export function ProfilePage({
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
-      ) : posts.length === 0 ? (
+      ) : posts.length === 0 && profileActivity.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
           {loggedInPubkey && pubkey === loggedInPubkey ? (
             <>
@@ -291,6 +298,8 @@ export function ProfilePage({
             const replyCountMap: Record<string, number> = {};
             const repostCountMap: Record<string, number> = {};
             const postsById: Record<string, Post> = {};
+            const activityById: Record<string, ActivityItem> = {};
+            for (const a of allActivityItems ?? []) activityById[a.txid] = a;
             for (const p of allPosts) {
               postsById[p.txid] = p;
               if (p.kind === KIND_TEXT_REPLY && p.parentTxid)
@@ -303,7 +312,22 @@ export function ProfilePage({
                 repostCountMap[p.parentTxid] =
                   (repostCountMap[p.parentTxid] ?? 0) + 1;
             }
-            return posts.map((post) => {
+
+            type TimelineEntry =
+              | { kind: "post"; post: Post; timestamp: number; txid: string }
+              | { kind: "activity"; item: ActivityItem; timestamp: number; txid: string };
+
+            const merged: TimelineEntry[] = [
+              ...posts.map((p) => ({ kind: "post" as const, post: p, timestamp: p.timestamp, txid: p.txid })),
+              ...profileActivity.map((a) => ({ kind: "activity" as const, item: a, timestamp: a.timestamp, txid: a.txid })),
+            ];
+            merged.sort((a, b) => b.timestamp - a.timestamp || a.txid.localeCompare(b.txid));
+
+            return merged.map((entry) => {
+              if (entry.kind === "activity") {
+                return <ActivityCard key={entry.txid} item={entry.item} profiles={profiles} loggedInPubkey={loggedInPubkey} onRefresh={load} />;
+              }
+              const post = entry.post;
               if (
                 post.kind === KIND_REPOST ||
                 post.kind === KIND_QUOTE_REPOST
@@ -326,20 +350,18 @@ export function ProfilePage({
                   />
                 );
               }
+              const parentPost = post.parentTxid ? (postsById[post.parentTxid] ?? null) : null;
               return (
                 <PostCard
                   key={post.txid}
                   post={post}
                   profile={profiles[post.pubkey]}
-                  parentPost={
-                    post.parentTxid
-                      ? (postsById[post.parentTxid] ?? null)
+                  parentPost={parentPost}
+                  parentProfile={parentPost ? profiles[parentPost.pubkey] : undefined}
+                  parentActivity={
+                    post.parentTxid && !parentPost
+                      ? (activityById[post.parentTxid] ?? null)
                       : null
-                  }
-                  parentProfile={
-                    post.parentTxid
-                      ? profiles[postsById[post.parentTxid]?.pubkey ?? ""]
-                      : undefined
                   }
                   replyCount={replyCountMap[post.txid] ?? 0}
                   repostCount={repostCountMap[post.txid] ?? 0}

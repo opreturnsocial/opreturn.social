@@ -4,7 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { Feed } from "../components/Feed";
 import { PostForm } from "../components/PostForm";
 import { SetupProfileBanner } from "../components/SetupProfileBanner";
-import type { Post, Profile } from "../types";
+import type { Post, Profile, ActivityItem } from "../types";
 
 interface HomePageProps {
   posts: Post[];
@@ -17,6 +17,7 @@ interface HomePageProps {
   onRefresh?: () => void;
   onEditProfile?: () => void;
   followedPubkeys?: Set<string>;
+  activityItems?: ActivityItem[];
   noteOgLeaderboard?: {
     txid: string;
     rank: number;
@@ -37,6 +38,7 @@ export function HomePage({
   onRefresh,
   onEditProfile,
   followedPubkeys,
+  activityItems,
   noteOgLeaderboard,
 }: HomePageProps) {
   const [tab, setTab] = useState<"global" | "following">("global");
@@ -64,6 +66,7 @@ export function HomePage({
           profiles={profiles}
           loggedInPubkey={loggedInPubkey}
           onRefresh={onRefresh}
+          activityItems={activityItems}
           noteOgLeaderboard={noteOgLeaderboard}
         />
       </>
@@ -96,6 +99,7 @@ export function HomePage({
           profiles={profiles}
           loggedInPubkey={loggedInPubkey}
           onRefresh={onRefresh}
+          activityItems={activityItems}
           noteOgLeaderboard={noteOgLeaderboard}
         />
       </TabsContent>
@@ -109,6 +113,7 @@ export function HomePage({
           onRefresh={onRefresh}
           tab="following"
           followedPubkeys={followedPubkeys}
+          activityItems={activityItems}
           noteOgLeaderboard={noteOgLeaderboard}
         />
       </TabsContent>

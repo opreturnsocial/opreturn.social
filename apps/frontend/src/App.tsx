@@ -1,18 +1,23 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
+
+function TxRedirect() {
+  const { txid } = useParams<{ txid: string }>();
+  return <Navigate to={`/tx/${txid}`} replace />;
+}
 import { Toaster } from "sonner";
 import { Header } from "./components/Header";
 import { ProfileModal } from "./components/ProfileModal";
 import { WalletFundingView } from "./components/WalletFundingView";
 import { HomePage } from "./pages/HomePage";
-import { PostPage } from "./pages/PostPage";
+import { TxPage } from "./pages/TxPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { AuthPage } from "./pages/AuthPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { useFeed } from "./hooks/useFeed";
 import { useWalletBalance } from "./hooks/useWalletBalance";
-import { fetchProfiles, fetchFollows, fetchNoteOgRanks } from "./api/cache";
-import type { Profile } from "./types";
+import { fetchProfiles, fetchFollows, fetchNoteOgRanks, fetchActivity } from "./api/cache";
+import type { Profile, ActivityItem } from "./types";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +40,7 @@ export function App() {
     return localStorage.getItem("ors_wallet_funded") === "true";
   });
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
   const [noteOgLeaderboard, setNoteOgLeaderboard] = useState<
     {
       txid: string;
@@ -71,9 +77,19 @@ export function App() {
     }
   }
 
+  async function refreshActivity() {
+    try {
+      const items = await fetchActivity();
+      setActivityItems(items);
+    } catch {
+      // silently ignore
+    }
+  }
+
   useEffect(() => {
     refreshProfiles();
     refreshNoteOgRanks();
+    refreshActivity();
     const saved = localStorage.getItem("ors_pubkey");
     if (saved) {
       setLoggedInPubkey(saved);
@@ -214,22 +230,25 @@ export function App() {
                         onRefresh={refresh}
                         onEditProfile={() => setProfileModalOpen(true)}
                         followedPubkeys={followedPubkeys}
+                        activityItems={activityItems}
                         noteOgLeaderboard={noteOgLeaderboard}
                       />
                     }
                   />
                   <Route
-                    path="/post/:txid"
+                    path="/tx/:txid"
                     element={
-                      <PostPage
+                      <TxPage
                         profiles={profiles}
                         loggedInPubkey={loggedInPubkey}
-                        onProfilesChange={refreshProfiles}
                         allPosts={posts}
+                        allActivityItems={activityItems}
                         noteOgLeaderboard={noteOgLeaderboard}
                       />
                     }
                   />
+                  <Route path="/post/:txid" element={<TxRedirect />} />
+                  <Route path="/activity/:txid" element={<TxRedirect />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route
                     path="/profile/:pubkey"
@@ -237,6 +256,7 @@ export function App() {
                       <ProfilePage
                         profiles={profiles}
                         allPosts={posts}
+                        allActivityItems={activityItems}
                         loggedInPubkey={loggedInPubkey}
                         followedPubkeys={followedPubkeys}
                         pendingFollowPubkeys={pendingFollowPubkeys}

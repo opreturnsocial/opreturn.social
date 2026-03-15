@@ -226,6 +226,19 @@ async function scanBlock(height: number): Promise<void> {
             create: { pubkey: update.pubkey, ...data, status: "confirmed" },
             update: { ...data, status: "confirmed" },
           });
+          await prisma.profileUpdateEvent.upsert({
+            where: { txid: tx.txid },
+            create: {
+              txid: tx.txid,
+              pubkey: update.pubkey,
+              propertyKind: update.propertyKind,
+              value: update.content,
+              blockHeight: height,
+              timestamp: block.time,
+              status: "confirmed",
+            },
+            update: { blockHeight: height, timestamp: block.time, status: "confirmed" },
+          });
           console.log(`[scanner] Profile update in block ${height}: ${update.pubkey.slice(0, 8)}… property=${update.propertyKind}`);
         }
       } else if (result.post.kind === KIND_FOLLOW) {
@@ -283,6 +296,10 @@ async function checkReorg(): Promise<void> {
         where: { blockHeight: { gte: record.height }, status: "confirmed" },
         data: { status: "pending", blockHeight: 0 },
       });
+      await prisma.profileUpdateEvent.updateMany({
+        where: { blockHeight: { gte: record.height }, status: "confirmed" },
+        data: { status: "pending", blockHeight: 0 },
+      });
       await prisma.scannerState.upsert({
         where: { id: 1 },
         update: { lastBlock: record.height - 1 },
@@ -304,6 +321,19 @@ async function checkMempoolEvictions(): Promise<void> {
         data: { status: "evicted" },
       });
       console.log(`[scanner] Post evicted: ${post.txid}`);
+    }
+  }
+
+  const pendingProfileUpdates = await prisma.profileUpdateEvent.findMany({ where: { status: "pending" } });
+  for (const evt of pendingProfileUpdates) {
+    try {
+      await getMempoolEntry(evt.txid);
+    } catch {
+      await prisma.profileUpdateEvent.update({
+        where: { txid: evt.txid },
+        data: { status: "evicted" },
+      });
+      console.log(`[scanner] ProfileUpdateEvent evicted: ${evt.txid}`);
     }
   }
 
@@ -390,10 +420,16 @@ async function storeV1Post(
     else if (propertyKind === PROPERTY_AVATAR_URL) data.avatarUrl = valueBytes.toString("utf8");
     else if (propertyKind === PROPERTY_BIO) data.bio = valueBytes.toString("utf8");
     if (Object.keys(data).length > 0) {
+      const valueStr = valueBytes.toString("utf8");
       await prisma.profile.upsert({
         where: { pubkey: pubkeyHex },
         create: { pubkey: pubkeyHex, ...data, status: "confirmed" },
         update: { ...data, status: "confirmed" },
+      });
+      await prisma.profileUpdateEvent.upsert({
+        where: { txid },
+        create: { txid, pubkey: pubkeyHex, propertyKind, value: valueStr, blockHeight, timestamp, status: "confirmed" },
+        update: { blockHeight, timestamp, status: "confirmed" },
       });
       console.log(`[scanner] v1 assembled PROFILE_UPDATE ${pubkeyHex.slice(0, 8)}… property=${propertyKind}`);
     }
@@ -504,6 +540,10 @@ export async function rescanFrom(fromBlock: number): Promise<void> {
     data: { status: "pending", blockHeight: 0 },
   });
   await prisma.follow.updateMany({
+    where: { OR: [{ blockHeight: { gte: fromBlock } }, { blockHeight: 0 }] },
+    data: { status: "pending", blockHeight: 0 },
+  });
+  await prisma.profileUpdateEvent.updateMany({
     where: { OR: [{ blockHeight: { gte: fromBlock } }, { blockHeight: 0 }] },
     data: { status: "pending", blockHeight: 0 },
   });

@@ -17,3 +17,17 @@ export interface StoredProfile {
   avatarUrl?: string | null;
   status?: string | null;
 }
+
+export interface StoredActivityItem {
+  type: "follow" | "unfollow" | "profile_update";
+  txid: string;
+  pubkey: string;
+  timestamp: number;
+  blockHeight: number;
+  status: string;
+  targetPubkey?: string;
+  propertyKind?: number;
+  value?: string;
+  replyCount: number;
+  repostCount: number;
+}

@@ -17,7 +17,7 @@ import {
 } from "@ors/protocol";
 import { prisma } from "./db.js";
 import { rescanFrom } from "./scanner.js";
-import type { StoredPost, StoredProfile } from "./types.js";
+import type { StoredPost, StoredProfile, StoredActivityItem } from "./types.js";
 
 const INTERNAL_TOKEN = process.env.CACHE_INTERNAL_TOKEN ?? "";
 
@@ -174,6 +174,23 @@ export function createServer() {
           create: { pubkey, ...data, status: "pending" },
           update: { ...data, status: "pending" },
         });
+        await prisma.profileUpdateEvent.upsert({
+          where: { txid },
+          create: {
+            txid,
+            pubkey,
+            propertyKind,
+            value,
+            blockHeight: block_height ?? 0,
+            timestamp: timestamp ?? Math.floor(Date.now() / 1000),
+            status: "pending",
+          },
+          update: {
+            blockHeight: block_height ?? 0,
+            timestamp: timestamp ?? Math.floor(Date.now() / 1000),
+            status: "pending",
+          },
+        });
       }
     } else if (kind === KIND_FOLLOW && targetPubkey !== undefined && typeof isFollow === "boolean") {
       await prisma.follow.upsert({
@@ -247,6 +264,124 @@ export function createServer() {
       status: p.status,
     }));
     res.json({ profiles: result });
+  });
+
+  async function attachCounts(items: Omit<StoredActivityItem, "replyCount" | "repostCount">[]): Promise<StoredActivityItem[]> {
+    const txids = items.map((i) => i.txid);
+    if (txids.length === 0) return items.map((i) => ({ ...i, replyCount: 0, repostCount: 0 }));
+
+    const [repliers, reposters] = await Promise.all([
+      prisma.post.groupBy({
+        by: ["parentTxid"],
+        where: { kind: KIND_TEXT_REPLY, parentTxid: { in: txids } },
+        _count: { txid: true },
+      }),
+      prisma.post.groupBy({
+        by: ["parentTxid"],
+        where: { kind: { in: [KIND_REPOST, KIND_QUOTE_REPOST] }, parentTxid: { in: txids } },
+        _count: { txid: true },
+      }),
+    ]);
+
+    const replyCountMap: Record<string, number> = {};
+    for (const r of repliers) if (r.parentTxid) replyCountMap[r.parentTxid] = r._count.txid;
+    const repostCountMap: Record<string, number> = {};
+    for (const r of reposters) if (r.parentTxid) repostCountMap[r.parentTxid] = r._count.txid;
+
+    return items.map((i) => ({
+      ...i,
+      replyCount: replyCountMap[i.txid] ?? 0,
+      repostCount: repostCountMap[i.txid] ?? 0,
+    }));
+  }
+
+  app.get("/activity/:txid", async (req, res) => {
+    const { txid } = req.params;
+
+    const [follow, profileUpdate] = await Promise.all([
+      prisma.follow.findFirst({ where: { txid } }),
+      prisma.profileUpdateEvent.findFirst({ where: { txid } }),
+    ]);
+
+    let item: Omit<StoredActivityItem, "replyCount" | "repostCount"> | null = null;
+
+    if (follow) {
+      item = {
+        type: follow.isFollow ? "follow" : "unfollow",
+        txid: follow.txid,
+        pubkey: follow.followerPubkey,
+        timestamp: follow.timestamp,
+        blockHeight: follow.blockHeight,
+        status: follow.status,
+        targetPubkey: follow.followeePubkey,
+      };
+    } else if (profileUpdate) {
+      item = {
+        type: "profile_update",
+        txid: profileUpdate.txid,
+        pubkey: profileUpdate.pubkey,
+        timestamp: profileUpdate.timestamp,
+        blockHeight: profileUpdate.blockHeight,
+        status: profileUpdate.status,
+        propertyKind: profileUpdate.propertyKind,
+        value: profileUpdate.value,
+      };
+    }
+
+    if (!item) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const [withCounts] = await attachCounts([item]);
+    res.json(withCounts);
+  });
+
+  app.get("/activity", async (req, res) => {
+    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const offset = Number(req.query.offset ?? 0);
+    const pubkey = req.query.pubkey as string | undefined;
+
+    const [follows, profileUpdates] = await Promise.all([
+      prisma.follow.findMany({
+        where: pubkey
+          ? { followerPubkey: pubkey, status: { not: "evicted" } }
+          : { status: { not: "evicted" } },
+      }),
+      prisma.profileUpdateEvent.findMany({
+        where: pubkey
+          ? { pubkey, status: { not: "evicted" } }
+          : { status: { not: "evicted" } },
+      }),
+    ]);
+
+    const rawItems: Omit<StoredActivityItem, "replyCount" | "repostCount">[] = [
+      ...follows.map((f) => ({
+        type: (f.isFollow ? "follow" : "unfollow") as "follow" | "unfollow",
+        txid: f.txid,
+        pubkey: f.followerPubkey,
+        timestamp: f.timestamp,
+        blockHeight: f.blockHeight,
+        status: f.status,
+        targetPubkey: f.followeePubkey,
+      })),
+      ...profileUpdates.map((e) => ({
+        type: "profile_update" as const,
+        txid: e.txid,
+        pubkey: e.pubkey,
+        timestamp: e.timestamp,
+        blockHeight: e.blockHeight,
+        status: e.status,
+        propertyKind: e.propertyKind,
+        value: e.value,
+      })),
+    ];
+
+    rawItems.sort((a, b) => b.timestamp - a.timestamp || a.txid.localeCompare(b.txid));
+    const pageRaw = rawItems.slice(offset, offset + limit);
+    const page = await attachCounts(pageRaw);
+
+    res.json({ items: page });
   });
 
   app.get("/og", async (_req, res) => {

@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { PostCard } from "../components/PostCard";
-import { fetchPost, fetchReplies } from "../api/cache";
+import { ActivityCard } from "../components/ActivityCard";
+import { fetchPost, fetchActivityItem, fetchReplies } from "../api/cache";
 import { submitReply } from "../api/facilitator";
 import { payAndBroadcast } from "../lib/payment";
 import { useNetworkStats } from "../hooks/useNetworkStats";
@@ -24,14 +25,15 @@ import {
   MAX_CONTENT_BYTES,
 } from "../lib/ors";
 import { getFeeBumpSatPerVByte } from "../lib/fees";
-import type { Post, Profile } from "../types";
+import type { Post, Profile, ActivityItem } from "../types";
+
 const POLL_INTERVAL_MS = 5000;
 
-interface PostPageProps {
+interface TxPageProps {
   profiles: Record<string, Profile>;
   loggedInPubkey: string | null;
-  onProfilesChange: () => void;
   allPosts: Post[];
+  allActivityItems?: ActivityItem[];
   noteOgLeaderboard?: {
     txid: string;
     rank: number;
@@ -41,32 +43,38 @@ interface PostPageProps {
   }[];
 }
 
-export function PostPage({
+export function TxPage({
   profiles,
   loggedInPubkey,
-  onProfilesChange: _,
   allPosts,
+  allActivityItems,
   noteOgLeaderboard,
-}: PostPageProps) {
+}: TxPageProps) {
   const { txid } = useParams<{ txid: string }>();
   const navigate = useNavigate();
   const { feeRate, btcPriceUsd } = useNetworkStats();
   const [post, setPost] = useState<Post | null>(null);
+  const [activity, setActivity] = useState<ActivityItem | null>(null);
   const [replies, setReplies] = useState<Post[]>([]);
-  const [loadingPost, setLoadingPost] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     if (!txid) return;
     try {
-      const [p, r] = await Promise.all([fetchPost(txid), fetchReplies(txid)]);
-      setPost(p);
-      setReplies(r);
+      const [postRes, activityRes, repliesRes] = await Promise.allSettled([
+        fetchPost(txid),
+        fetchActivityItem(txid),
+        fetchReplies(txid),
+      ]);
+      if (postRes.status === "fulfilled") setPost(postRes.value);
+      else if (activityRes.status === "fulfilled") setActivity(activityRes.value);
+      if (repliesRes.status === "fulfilled") setReplies(repliesRes.value);
     } catch {
       // ignore polling errors
     } finally {
-      setLoadingPost(false);
+      setLoading(false);
     }
   }, [txid]);
 
@@ -86,7 +94,6 @@ export function PostPage({
       const msgHash = sha256(signingPayload);
       const sig = await signPayload(signingPayload, loggedInPubkey);
 
-      // verify locally before sending
       if (!schnorr.verify(sig, msgHash, loggedInPubkey)) {
         toast.error("Signature verification failed");
         return;
@@ -104,7 +111,7 @@ export function PostPage({
     }
   }
 
-  if (loadingPost) {
+  if (loading) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-32 w-full" />
@@ -113,10 +120,10 @@ export function PostPage({
     );
   }
 
-  if (!post) {
+  if (!post && !activity) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-        <p className="text-sm">Post not found.</p>
+        <p className="text-sm">Not found.</p>
         <Button
           variant="ghost"
           size="sm"
@@ -134,40 +141,50 @@ export function PostPage({
   for (const p of allPosts) {
     if (p.kind === KIND_TEXT_REPLY && p.parentTxid)
       replyCountMap[p.parentTxid] = (replyCountMap[p.parentTxid] ?? 0) + 1;
-    else if (
-      (p.kind === KIND_REPOST || p.kind === KIND_QUOTE_REPOST) &&
-      p.parentTxid
-    )
+    else if ((p.kind === KIND_REPOST || p.kind === KIND_QUOTE_REPOST) && p.parentTxid)
       repostCountMap[p.parentTxid] = (repostCountMap[p.parentTxid] ?? 0) + 1;
   }
 
   const postsById: Record<string, Post> = {};
   for (const p of allPosts) postsById[p.txid] = p;
 
+  const activityById: Record<string, ActivityItem> = {};
+  for (const a of allActivityItems ?? []) activityById[a.txid] = a;
+
   const canReply = !!loggedInPubkey;
-  const remaining =
-    MAX_CONTENT_BYTES - new TextEncoder().encode(replyText).length;
+  const remaining = MAX_CONTENT_BYTES - new TextEncoder().encode(replyText).length;
 
   return (
     <div>
-      <PostCard
-        post={post}
-        profile={profiles[post.pubkey]}
-        parentPost={
-          post.parentTxid ? (postsById[post.parentTxid] ?? null) : null
-        }
-        parentProfile={
-          post.parentTxid
-            ? profiles[postsById[post.parentTxid]?.pubkey ?? ""]
-            : undefined
-        }
-        replyCount={replies.length}
-        repostCount={repostCountMap[post.txid] ?? 0}
-        loggedInPubkey={loggedInPubkey}
-        onRefresh={load}
-        noteOgLeaderboard={noteOgLeaderboard}
-        allProfiles={profiles}
-      />
+      {post && (
+        <PostCard
+          post={post}
+          profile={profiles[post.pubkey]}
+          parentPost={post.parentTxid ? (postsById[post.parentTxid] ?? null) : null}
+          parentProfile={
+            post.parentTxid ? profiles[postsById[post.parentTxid]?.pubkey ?? ""] : undefined
+          }
+          parentActivity={
+            post.parentTxid && !postsById[post.parentTxid]
+              ? (activityById[post.parentTxid] ?? null)
+              : null
+          }
+          replyCount={replies.length}
+          repostCount={repostCountMap[post.txid] ?? 0}
+          loggedInPubkey={loggedInPubkey}
+          onRefresh={load}
+          noteOgLeaderboard={noteOgLeaderboard}
+          allProfiles={profiles}
+        />
+      )}
+      {activity && (
+        <ActivityCard
+          item={activity}
+          profiles={profiles}
+          loggedInPubkey={loggedInPubkey}
+          onRefresh={load}
+        />
+      )}
 
       <div className="mt-4">
         {canReply ? (
@@ -190,11 +207,8 @@ export function PostPage({
               {feeRate !== null &&
                 replyText.trim() &&
                 (() => {
-                  const contentBytes = new TextEncoder().encode(
-                    replyText,
-                  ).length;
+                  const contentBytes = new TextEncoder().encode(replyText).length;
                   const version = getProtocolVersion();
-                  // kindData for TEXT_REPLY = parentTxid(32) + content
                   const vBytes = estimatedVBytes(32 + contentBytes, version);
                   const effectiveFeeRate = feeRate + getFeeBumpSatPerVByte();
                   const sats = Math.ceil(vBytes * effectiveFeeRate);
@@ -235,6 +249,8 @@ export function PostPage({
                 replyCount={replyCountMap[r.txid] ?? 0}
                 loggedInPubkey={loggedInPubkey}
                 onRefresh={load}
+                noteOgLeaderboard={noteOgLeaderboard}
+                allProfiles={profiles}
               />
             ))}
           </div>

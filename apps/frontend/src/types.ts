@@ -18,6 +18,20 @@ export interface Profile {
   status?: string;
 }
 
+export interface ActivityItem {
+  type: "follow" | "unfollow" | "profile_update";
+  txid: string;
+  pubkey: string;
+  timestamp: number;
+  blockHeight: number;
+  status: string;
+  targetPubkey?: string;
+  propertyKind?: number;
+  value?: string;
+  replyCount: number;
+  repostCount: number;
+}
+
 // Alby Extension Nostr API (window.nostr)
 declare global {
   interface Window {

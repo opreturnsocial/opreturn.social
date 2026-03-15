@@ -19,13 +19,13 @@ import {
   MAX_CONTENT_BYTES,
 } from "../lib/ors";
 import { signPayload } from "../lib/signing";
-import type { Post } from "../types";
 
 interface RepostModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onReposted: () => void;
-  post: Post;
+  txid: string;
+  displayContent?: string;
   loggedInPubkey: string | null;
 }
 
@@ -33,7 +33,8 @@ export function RepostModal({
   open,
   onOpenChange,
   onReposted,
-  post,
+  txid,
+  displayContent,
   loggedInPubkey,
 }: RepostModalProps) {
   const [quote, setQuote] = useState("");
@@ -52,9 +53,9 @@ export function RepostModal({
 
       let v0Unsigned: Uint8Array<ArrayBuffer>;
       if (isQuote) {
-        v0Unsigned = buildQuoteRepostUnsignedPayload(quote.trim(), pubkey, post.txid);
+        v0Unsigned = buildQuoteRepostUnsignedPayload(quote.trim(), pubkey, txid);
       } else {
-        v0Unsigned = buildRepostUnsignedPayload(pubkey, post.txid);
+        v0Unsigned = buildRepostUnsignedPayload(pubkey, txid);
       }
 
       const signingPayload = version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
@@ -62,14 +63,14 @@ export function RepostModal({
 
       let invoiceRes;
       if (isQuote) {
-        invoiceRes = await submitQuoteRepost(quote.trim(), pubkey, sig, post.txid, version);
+        invoiceRes = await submitQuoteRepost(quote.trim(), pubkey, sig, txid, version);
       } else {
-        invoiceRes = await submitRepost(pubkey, sig, post.txid, version);
+        invoiceRes = await submitRepost(pubkey, sig, txid, version);
       }
-      const { txid } = await payAndBroadcast(invoiceRes.invoice, invoiceRes.paymentHash);
+      const { txid: broadcastTxid } = await payAndBroadcast(invoiceRes.invoice, invoiceRes.paymentHash);
 
       toast.success(
-        `${isQuote ? "Quote reposted" : "Reposted"}! ${txid.slice(0, 16)}…`,
+        `${isQuote ? "Quote reposted" : "Reposted"}! ${broadcastTxid.slice(0, 16)}…`,
       );
       setQuote("");
       onOpenChange(false);
@@ -89,9 +90,9 @@ export function RepostModal({
         </DialogHeader>
         <div className="space-y-3">
           <div className="rounded-md border p-3 text-sm text-muted-foreground bg-muted/30">
-            <p className="font-mono text-xs mb-1">{post.txid.slice(0, 16)}…</p>
+            <p className="font-mono text-xs mb-1">{txid.slice(0, 16)}…</p>
             <p className="whitespace-pre-wrap break-words line-clamp-3">
-              {post.content}
+              {displayContent ?? ''}
             </p>
           </div>
           <Textarea
