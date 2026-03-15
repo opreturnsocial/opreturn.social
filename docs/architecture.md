@@ -107,7 +107,7 @@ No batching, no intermediate trust - every post is an on-chain bitcoin transacti
 
 ## Protocol Specification
 
-See [ORS](https://github.com/opreturnsocial/ors) base protocol and [ORSK](https://github.com/opreturnsocial/orsk) kinds registry.
+See [ORS](https://github.com/opreturnsocial/ors) base protocol and [ORK](https://github.com/opreturnsocial/ork) kinds registry.
 
 ### ORS Wire Formats
 
