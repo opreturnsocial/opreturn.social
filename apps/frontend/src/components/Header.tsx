@@ -124,6 +124,11 @@ export function Header({
                 <DropdownMenuItem onClick={onSettings}>
                   Settings
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href="https://ors.dev" target="_blank" rel="noopener noreferrer">
+                    ORS Protocol
+                  </a>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={onLogout}>Logout</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
