@@ -187,7 +187,7 @@ function LandingView({
           <p className="text-orange-100 font-medium text-center">
             <span className="font-semibold">OP_RETURN SOCIAL</span>
             <br />
-            Your posts, on-chain forever.
+            Freedom is not free
           </p>
         </div>
       </div>
@@ -239,9 +239,7 @@ function SignupWelcomeView({
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold">Welcome to OP_RETURN SOCIAL</h1>
-            <p className="text-muted-foreground">
-              Your posts, on-chain forever.
-            </p>
+            <p className="text-muted-foreground">Freedom is not free</p>
           </div>
 
           <div className="space-y-4">
