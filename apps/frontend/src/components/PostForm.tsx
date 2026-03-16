@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { submitPost } from "../api/facilitator";
 import { payAndBroadcast } from "../lib/payment";
-import { buildUnsignedPayload, buildV1SigningBody, getProtocolVersion, estimatedVBytes, MAX_CONTENT_BYTES } from "../lib/ors";
+import {
+  buildUnsignedPayload,
+  buildV1SigningBody,
+  getProtocolVersion,
+  estimatedVBytes,
+  MAX_CONTENT_BYTES,
+} from "../lib/ors";
 import { getFeeBumpSatPerVByte } from "../lib/fees";
 import { signPayload } from "../lib/signing";
 import type { Profile } from "../types";
@@ -67,12 +73,20 @@ export function PostForm({
     try {
       const version = getProtocolVersion();
       const v0Unsigned = buildUnsignedPayload(content.trim(), pubkey);
-      const signingPayload = version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
+      const signingPayload =
+        version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, pubkey);
-      const { invoice, paymentHash } = await submitPost(content.trim(), pubkey, sig, version);
+      const { invoice, paymentHash } = await submitPost(
+        content.trim(),
+        pubkey,
+        sig,
+        version,
+      );
       const { txid } = await payAndBroadcast(invoice, paymentHash);
 
-      toast.success(`Posted! ${txid.slice(0, 16)}…`);
+      toast.success("Posted successfully", {
+        description: `TXID: ${txid}`,
+      });
       onContentChange("");
       onPosted();
     } catch (err) {
