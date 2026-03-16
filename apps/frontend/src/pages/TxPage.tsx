@@ -69,7 +69,8 @@ export function TxPage({
         fetchReplies(txid),
       ]);
       if (postRes.status === "fulfilled") setPost(postRes.value);
-      else if (activityRes.status === "fulfilled") setActivity(activityRes.value);
+      else if (activityRes.status === "fulfilled")
+        setActivity(activityRes.value);
       if (repliesRes.status === "fulfilled") setReplies(repliesRes.value);
     } catch {
       // ignore polling errors
@@ -89,8 +90,13 @@ export function TxPage({
     setSubmitting(true);
     try {
       const version = getProtocolVersion();
-      const v0Unsigned = buildReplyUnsignedPayload(replyText.trim(), loggedInPubkey, txid);
-      const signingPayload = version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
+      const v0Unsigned = buildReplyUnsignedPayload(
+        replyText.trim(),
+        loggedInPubkey,
+        txid,
+      );
+      const signingPayload =
+        version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const msgHash = sha256(signingPayload);
       const sig = await signPayload(signingPayload, loggedInPubkey);
 
@@ -99,10 +105,18 @@ export function TxPage({
         return;
       }
 
-      const { invoice, paymentHash } = await submitReply(replyText.trim(), loggedInPubkey, sig, txid, version);
+      const { invoice, paymentHash } = await submitReply(
+        replyText.trim(),
+        loggedInPubkey,
+        sig,
+        txid,
+        version,
+      );
       await payAndBroadcast(invoice, paymentHash);
       setReplyText("");
-      toast.success("Reply submitted!");
+      toast.success("Reply submitted!", {
+        description: `TXID: ${txid}`,
+      });
       await load();
     } catch (err) {
       toast.error((err as Error).message ?? "Failed to submit reply");
@@ -141,7 +155,10 @@ export function TxPage({
   for (const p of allPosts) {
     if (p.kind === KIND_TEXT_REPLY && p.parentTxid)
       replyCountMap[p.parentTxid] = (replyCountMap[p.parentTxid] ?? 0) + 1;
-    else if ((p.kind === KIND_REPOST || p.kind === KIND_QUOTE_REPOST) && p.parentTxid)
+    else if (
+      (p.kind === KIND_REPOST || p.kind === KIND_QUOTE_REPOST) &&
+      p.parentTxid
+    )
       repostCountMap[p.parentTxid] = (repostCountMap[p.parentTxid] ?? 0) + 1;
   }
 
@@ -152,7 +169,8 @@ export function TxPage({
   for (const a of allActivityItems ?? []) activityById[a.txid] = a;
 
   const canReply = !!loggedInPubkey;
-  const remaining = MAX_CONTENT_BYTES - new TextEncoder().encode(replyText).length;
+  const remaining =
+    MAX_CONTENT_BYTES - new TextEncoder().encode(replyText).length;
 
   return (
     <div>
@@ -160,9 +178,13 @@ export function TxPage({
         <PostCard
           post={post}
           profile={profiles[post.pubkey]}
-          parentPost={post.parentTxid ? (postsById[post.parentTxid] ?? null) : null}
+          parentPost={
+            post.parentTxid ? (postsById[post.parentTxid] ?? null) : null
+          }
           parentProfile={
-            post.parentTxid ? profiles[postsById[post.parentTxid]?.pubkey ?? ""] : undefined
+            post.parentTxid
+              ? profiles[postsById[post.parentTxid]?.pubkey ?? ""]
+              : undefined
           }
           parentActivity={
             post.parentTxid && !postsById[post.parentTxid]
@@ -207,7 +229,9 @@ export function TxPage({
               {feeRate !== null &&
                 replyText.trim() &&
                 (() => {
-                  const contentBytes = new TextEncoder().encode(replyText).length;
+                  const contentBytes = new TextEncoder().encode(
+                    replyText,
+                  ).length;
                   const version = getProtocolVersion();
                   const vBytes = estimatedVBytes(32 + contentBytes, version);
                   const effectiveFeeRate = feeRate + getFeeBumpSatPerVByte();

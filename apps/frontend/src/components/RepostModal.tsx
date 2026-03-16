@@ -53,25 +53,39 @@ export function RepostModal({
 
       let v0Unsigned: Uint8Array<ArrayBuffer>;
       if (isQuote) {
-        v0Unsigned = buildQuoteRepostUnsignedPayload(quote.trim(), pubkey, txid);
+        v0Unsigned = buildQuoteRepostUnsignedPayload(
+          quote.trim(),
+          pubkey,
+          txid,
+        );
       } else {
         v0Unsigned = buildRepostUnsignedPayload(pubkey, txid);
       }
 
-      const signingPayload = version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
+      const signingPayload =
+        version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, pubkey);
 
       let invoiceRes;
       if (isQuote) {
-        invoiceRes = await submitQuoteRepost(quote.trim(), pubkey, sig, txid, version);
+        invoiceRes = await submitQuoteRepost(
+          quote.trim(),
+          pubkey,
+          sig,
+          txid,
+          version,
+        );
       } else {
         invoiceRes = await submitRepost(pubkey, sig, txid, version);
       }
-      const { txid: broadcastTxid } = await payAndBroadcast(invoiceRes.invoice, invoiceRes.paymentHash);
-
-      toast.success(
-        `${isQuote ? "Quote reposted" : "Reposted"}! ${broadcastTxid.slice(0, 16)}…`,
+      const { txid: broadcastTxid } = await payAndBroadcast(
+        invoiceRes.invoice,
+        invoiceRes.paymentHash,
       );
+
+      toast.success(`${isQuote ? "Quote reposted" : "Reposted"}!`, {
+        description: `TXID: ${broadcastTxid}`,
+      });
       setQuote("");
       onOpenChange(false);
       onReposted();
@@ -92,7 +106,7 @@ export function RepostModal({
           <div className="rounded-md border p-3 text-sm text-muted-foreground bg-muted/30">
             <p className="font-mono text-xs mb-1">{txid.slice(0, 16)}…</p>
             <p className="whitespace-pre-wrap break-words line-clamp-3">
-              {displayContent ?? ''}
+              {displayContent ?? ""}
             </p>
           </div>
           <Textarea
@@ -104,7 +118,9 @@ export function RepostModal({
             disabled={submitting}
           />
           {remaining < 100 && (
-            <p className={`text-xs text-right ${remaining < 20 ? "text-destructive" : "text-muted-foreground"}`}>
+            <p
+              className={`text-xs text-right ${remaining < 20 ? "text-destructive" : "text-muted-foreground"}`}
+            >
               {remaining} chars remaining
             </p>
           )}
