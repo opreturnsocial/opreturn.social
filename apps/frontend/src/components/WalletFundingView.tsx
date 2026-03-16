@@ -3,6 +3,7 @@ import { Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { NWCClient } from "@getalby/sdk/nwc";
+import { getFiatValue } from "@getalby/lightning-tools/fiat";
 
 export function WalletFundingView({
   onComplete,
@@ -25,6 +26,7 @@ export function WalletFundingView({
     allowAmountEdit ? "choose-amount" : "creating",
   );
   const [invoiceAmount, setInvoiceAmount] = useState(amount ?? 5000);
+  const [usdAmount, setUsdAmount] = useState<number | null>(null);
   const [invoice, setInvoice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(3600);
@@ -32,6 +34,23 @@ export function WalletFundingView({
   const clientRef = useRef<NWCClient | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    getFiatValue({ satoshi: invoiceAmount, currency: "USD" })
+      .then((v) => setUsdAmount(v))
+      .catch(() => {});
+  }, [invoiceAmount]);
+
+  function formatUsd(usd: number | null): string | null {
+    if (usd === null) return null;
+    return usd < 0.01
+      ? "<$0.01"
+      : "$" +
+          usd.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+  }
 
   useEffect(() => {
     if (!allowAmountEdit) setup();
@@ -158,6 +177,11 @@ export function WalletFundingView({
             onChange={(e) => setInvoiceAmount(Number(e.target.value))}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
+          {formatUsd(usdAmount) && (
+            <p className="text-xs text-muted-foreground">
+              {formatUsd(usdAmount)} USD
+            </p>
+          )}
         </div>
         <Button
           className="w-full"
@@ -238,8 +262,15 @@ export function WalletFundingView({
         Send{" "}
         <span className="font-semibold text-foreground">
           {invoiceAmount.toLocaleString()} sats
+          {formatUsd(usdAmount) && (
+            <span className="font-normal text-muted-foreground">
+              {" "}
+              ({formatUsd(usdAmount)})
+            </span>
+          )}
         </span>{" "}
-        via the bitcoin lightning network to activate your wallet. Expires in{" "}
+        via the <span className="font-semibold">bitcoin lightning network</span>{" "}
+        to activate your wallet. Expires in{" "}
         <span
           className={`font-mono font-semibold ${secondsLeft < 300 ? "text-destructive" : "text-foreground"}`}
         >
@@ -261,6 +292,10 @@ export function WalletFundingView({
 
       <Card className="bg-muted/50">
         <CardContent className="p-3">
+          <p className="text-xs mb-2">
+            Or copy the following{" "}
+            <span className="font-semibold">bitcoin lightning invoice</span>
+          </p>
           <div className="flex items-center gap-2">
             <code className="text-xs font-mono break-all text-muted-foreground">
               {invoice}
