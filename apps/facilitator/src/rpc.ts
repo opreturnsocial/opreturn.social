@@ -93,3 +93,7 @@ export async function unlockInputs(
 ): Promise<void> {
   await rpcWalletCall<boolean>("lockunspent", [true, inputs]);
 }
+
+export async function getWalletBalance(): Promise<number> {
+  return rpcWalletCall<number>("getbalance");
+}

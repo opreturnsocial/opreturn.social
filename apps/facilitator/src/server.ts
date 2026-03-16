@@ -29,6 +29,7 @@ import {
   estimateSmartFee,
   decodeRawTransaction,
   unlockInputs,
+  getWalletBalance,
 } from "./rpc.js";
 import { prisma } from "./db.js";
 
@@ -169,12 +170,28 @@ async function handleAction(
     } else {
       const chunks = buildV1();
       if (chunks.length > MAX_CHUNKS_PER_REQUEST) {
-        res.status(400).json({ error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}` });
+        res
+          .status(400)
+          .json({
+            error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}`,
+          });
         return;
       }
       chunksJson = JSON.stringify(chunks);
       payloadHex = "";
       estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
+    }
+
+    const walletBalanceBtc = await getWalletBalance();
+    const estimatedFeeBtc = estimatedFeeSats / 1e8;
+    if (walletBalanceBtc < estimatedFeeBtc) {
+      res
+        .status(503)
+        .json({
+          error:
+            "Facilitator has insufficient wallet balance to cover transaction fee",
+        });
+      return;
     }
 
     const result = await preparePending(
@@ -226,9 +243,18 @@ export function createServer() {
   });
 
   app.post("/post", async (req, res) => {
-    const { content, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
-      content?: string; pubkey?: string; sig?: string;
-      protocolVersion?: number; feeBumpSatPerVByte?: number;
+    const {
+      content,
+      pubkey,
+      sig,
+      protocolVersion: pv,
+      feeBumpSatPerVByte: fbRaw,
+    } = req.body as {
+      content?: string;
+      pubkey?: string;
+      sig?: string;
+      protocolVersion?: number;
+      feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
@@ -239,7 +265,9 @@ export function createServer() {
     }
 
     await handleAction(
-      "post", protocolVersion, feeBumpBtcPerKb,
+      "post",
+      protocolVersion,
+      feeBumpBtcPerKb,
       () => buildPayload(content, pubkey, sig),
       () => buildPayloadV1(content, pubkey, sig),
       { content, pubkey, sig, protocolVersion },
@@ -248,20 +276,35 @@ export function createServer() {
   });
 
   app.post("/reply", async (req, res) => {
-    const { content, pubkey, sig, parentTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
-      content?: string; pubkey?: string; sig?: string; parentTxid?: string;
-      protocolVersion?: number; feeBumpSatPerVByte?: number;
+    const {
+      content,
+      pubkey,
+      sig,
+      parentTxid,
+      protocolVersion: pv,
+      feeBumpSatPerVByte: fbRaw,
+    } = req.body as {
+      content?: string;
+      pubkey?: string;
+      sig?: string;
+      parentTxid?: string;
+      protocolVersion?: number;
+      feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!content || !pubkey || !sig || !parentTxid) {
-      res.status(400).json({ error: "content, pubkey, sig, and parentTxid are required" });
+      res
+        .status(400)
+        .json({ error: "content, pubkey, sig, and parentTxid are required" });
       return;
     }
 
     await handleAction(
-      "reply", protocolVersion, feeBumpBtcPerKb,
+      "reply",
+      protocolVersion,
+      feeBumpBtcPerKb,
       () => buildPayloadReply(content, pubkey, sig, parentTxid),
       () => buildPayloadReplyV1(content, pubkey, sig, parentTxid),
       { content, pubkey, sig, parentTxid, protocolVersion },
@@ -270,20 +313,33 @@ export function createServer() {
   });
 
   app.post("/repost", async (req, res) => {
-    const { pubkey, sig, referencedTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
-      pubkey?: string; sig?: string; referencedTxid?: string;
-      protocolVersion?: number; feeBumpSatPerVByte?: number;
+    const {
+      pubkey,
+      sig,
+      referencedTxid,
+      protocolVersion: pv,
+      feeBumpSatPerVByte: fbRaw,
+    } = req.body as {
+      pubkey?: string;
+      sig?: string;
+      referencedTxid?: string;
+      protocolVersion?: number;
+      feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!pubkey || !sig || !referencedTxid) {
-      res.status(400).json({ error: "pubkey, sig, and referencedTxid are required" });
+      res
+        .status(400)
+        .json({ error: "pubkey, sig, and referencedTxid are required" });
       return;
     }
 
     await handleAction(
-      "repost", protocolVersion, feeBumpBtcPerKb,
+      "repost",
+      protocolVersion,
+      feeBumpBtcPerKb,
       () => buildPayloadRepost(pubkey, sig, referencedTxid),
       () => buildPayloadRepostV1(pubkey, sig, referencedTxid),
       { pubkey, sig, referencedTxid, protocolVersion },
@@ -292,20 +348,37 @@ export function createServer() {
   });
 
   app.post("/quote-repost", async (req, res) => {
-    const { content, pubkey, sig, referencedTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
-      content?: string; pubkey?: string; sig?: string; referencedTxid?: string;
-      protocolVersion?: number; feeBumpSatPerVByte?: number;
+    const {
+      content,
+      pubkey,
+      sig,
+      referencedTxid,
+      protocolVersion: pv,
+      feeBumpSatPerVByte: fbRaw,
+    } = req.body as {
+      content?: string;
+      pubkey?: string;
+      sig?: string;
+      referencedTxid?: string;
+      protocolVersion?: number;
+      feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!content || !pubkey || !sig || !referencedTxid) {
-      res.status(400).json({ error: "content, pubkey, sig, and referencedTxid are required" });
+      res
+        .status(400)
+        .json({
+          error: "content, pubkey, sig, and referencedTxid are required",
+        });
       return;
     }
 
     await handleAction(
-      "quote-repost", protocolVersion, feeBumpBtcPerKb,
+      "quote-repost",
+      protocolVersion,
+      feeBumpBtcPerKb,
       () => buildPayloadQuoteRepost(content, pubkey, sig, referencedTxid),
       () => buildPayloadQuoteRepostV1(content, pubkey, sig, referencedTxid),
       { content, pubkey, sig, referencedTxid, protocolVersion },
@@ -314,20 +387,37 @@ export function createServer() {
   });
 
   app.post("/follow", async (req, res) => {
-    const { targetPubkey, isFollow, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
-      targetPubkey?: string; isFollow?: boolean; pubkey?: string; sig?: string;
-      protocolVersion?: number; feeBumpSatPerVByte?: number;
+    const {
+      targetPubkey,
+      isFollow,
+      pubkey,
+      sig,
+      protocolVersion: pv,
+      feeBumpSatPerVByte: fbRaw,
+    } = req.body as {
+      targetPubkey?: string;
+      isFollow?: boolean;
+      pubkey?: string;
+      sig?: string;
+      protocolVersion?: number;
+      feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!targetPubkey || typeof isFollow !== "boolean" || !pubkey || !sig) {
-      res.status(400).json({ error: "targetPubkey, isFollow, pubkey, and sig are required" });
+      res
+        .status(400)
+        .json({
+          error: "targetPubkey, isFollow, pubkey, and sig are required",
+        });
       return;
     }
 
     await handleAction(
-      "follow", protocolVersion, feeBumpBtcPerKb,
+      "follow",
+      protocolVersion,
+      feeBumpBtcPerKb,
       () => buildPayloadFollow(targetPubkey, isFollow, pubkey, sig),
       () => buildPayloadFollowV1(targetPubkey, isFollow, pubkey, sig),
       { targetPubkey, isFollow, pubkey, sig, protocolVersion },
@@ -336,20 +426,35 @@ export function createServer() {
   });
 
   app.post("/profile", async (req, res) => {
-    const { propertyKind, value, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
-      propertyKind?: number; value?: string; pubkey?: string; sig?: string;
-      protocolVersion?: number; feeBumpSatPerVByte?: number;
+    const {
+      propertyKind,
+      value,
+      pubkey,
+      sig,
+      protocolVersion: pv,
+      feeBumpSatPerVByte: fbRaw,
+    } = req.body as {
+      propertyKind?: number;
+      value?: string;
+      pubkey?: string;
+      sig?: string;
+      protocolVersion?: number;
+      feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (typeof propertyKind !== "number" || !value || !pubkey || !sig) {
-      res.status(400).json({ error: "propertyKind, value, pubkey, and sig are required" });
+      res
+        .status(400)
+        .json({ error: "propertyKind, value, pubkey, and sig are required" });
       return;
     }
 
     await handleAction(
-      "profile", protocolVersion, feeBumpBtcPerKb,
+      "profile",
+      protocolVersion,
+      feeBumpBtcPerKb,
       () => buildPayloadProfile(propertyKind, value, pubkey, sig),
       () => buildPayloadProfileV1(propertyKind, value, pubkey, sig),
       { propertyKind, value, pubkey, sig, protocolVersion },
