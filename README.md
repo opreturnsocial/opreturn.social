@@ -2,7 +2,7 @@
 
 > _Freedom is not free_
 
-The first official [ORS](https://github.com/opreturnsocial) client.
+The first official [ORS](https://github.com/opreturnsocial/ors) client.
 
 **[Try it now](https://opreturn.social)**
 
