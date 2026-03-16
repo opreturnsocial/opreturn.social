@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Clock, Check, Copy, ExternalLink } from "lucide-react";
+import { Clock, Check, Copy, ExternalLink, AlertTriangle } from "lucide-react";
 import { fetchActivity } from "../api/cache";
 import type { ActivityItem } from "../types";
 import { useNetworkStats } from "../hooks/useNetworkStats";
@@ -10,6 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +58,7 @@ export function ProfileModal({
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl ?? "");
   const [saving, setSaving] = useState<string | null>(null);
+  const [showOrsWarning, setShowOrsWarning] = useState(false);
   const [fieldActivity, setFieldActivity] = useState<Map<number, ActivityItem>>(
     new Map(),
   );
@@ -169,113 +180,188 @@ export function ProfileModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle>Edit Profile</DialogTitle>
-          {profile?.status === "pending" && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <Clock className="h-3 w-3" /> Awaiting block confirmation
-            </p>
-          )}
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+            {profile?.status === "pending" && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                <Clock className="h-3 w-3" /> Awaiting block confirmation
+              </p>
+            )}
+          </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Name</label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Name</label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={saving !== null}
+                />
+                {(() => {
+                  const c = fieldCost(name);
+                  return (
+                    c && (
+                      <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">
+                        ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
+                      </span>
+                    )
+                  );
+                })()}
+                <Button
+                  size="sm"
+                  onClick={() => saveField(PROPERTY_NAME, name, "Name")}
+                  disabled={saving !== null || !name.trim()}
+                >
+                  {saving === "Name" ? "Saving…" : "Save"}
+                </Button>
+              </div>
+              <TxidRow propertyKind={PROPERTY_NAME} />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium">
+                Avatar URL{" "}
+                <a
+                  href="https://ors.sh"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-orange-500 hover:underline font-normal"
+                >
+                  Use ors.sh
+                </a>
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://example.com/avatar.png"
+                  value={avatarUrl}
+                  onChange={(e) => setAvatarUrl(e.target.value)}
+                  disabled={saving !== null}
+                />
+                {(() => {
+                  const c = fieldCost(avatarUrl);
+                  return (
+                    c && (
+                      <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">
+                        ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
+                      </span>
+                    )
+                  );
+                })()}
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (
+                      avatarUrl.trim() &&
+                      !avatarUrl.startsWith("https://ors.sh/")
+                    ) {
+                      setShowOrsWarning(true);
+                    } else {
+                      saveField(PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL");
+                    }
+                  }}
+                  disabled={saving !== null || !avatarUrl.trim()}
+                >
+                  {saving === "Avatar URL" ? "Saving…" : "Save"}
+                </Button>
+              </div>
+              {avatarUrl.trim() && !avatarUrl.startsWith("https://ors.sh/") && (
+                <div className="text-xs text-amber-600">
+                  <p className="flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Consider using{" "}
+                    <a
+                      href="https://ors.sh"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
+                      ors.sh
+                    </a>
+                    <br />
+                  </p>
+                  <p>
+                    You can update the link later without a new transaction.
+                  </p>
+                </div>
+              )}
+              <TxidRow propertyKind={PROPERTY_AVATAR_URL} />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Bio</label>
+              <Textarea
+                placeholder="Tell the world who you are"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                rows={3}
+                className="resize-none"
                 disabled={saving !== null}
               />
-              {(() => {
-                const c = fieldCost(name);
-                return (
-                  c && (
-                    <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">
-                      ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
-                    </span>
-                  )
-                );
-              })()}
-              <Button
-                size="sm"
-                onClick={() => saveField(PROPERTY_NAME, name, "Name")}
-                disabled={saving !== null || !name.trim()}
-              >
-                {saving === "Name" ? "Saving…" : "Save"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const c = fieldCost(bio);
+                  return (
+                    c && (
+                      <span className="text-xs text-muted-foreground font-mono">
+                        ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
+                      </span>
+                    )
+                  );
+                })()}
+                <Button
+                  size="sm"
+                  onClick={() => saveField(PROPERTY_BIO, bio, "Bio")}
+                  disabled={saving !== null || !bio.trim()}
+                >
+                  {saving === "Bio" ? "Saving…" : "Save Bio"}
+                </Button>
+              </div>
+              <TxidRow propertyKind={PROPERTY_BIO} />
             </div>
-            <TxidRow propertyKind={PROPERTY_NAME} />
           </div>
+        </DialogContent>
+      </Dialog>
 
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Avatar URL</label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="https://example.com/avatar.png"
-                value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
-                disabled={saving !== null}
-              />
-              {(() => {
-                const c = fieldCost(avatarUrl);
-                return (
-                  c && (
-                    <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">
-                      ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
-                    </span>
-                  )
-                );
-              })()}
-              <Button
-                size="sm"
-                onClick={() =>
-                  saveField(PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL")
-                }
-                disabled={saving !== null || !avatarUrl.trim()}
+      <AlertDialog open={showOrsWarning} onOpenChange={setShowOrsWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Not using ors.sh?</AlertDialogTitle>
+            <AlertDialogDescription>
+              With a direct URL, if you want to change your avatar in the future
+              you'll need to post a new bitcoin transaction and pay another fee.
+              <br />
+              <br />
+              Using{" "}
+              <a
+                href="https://ors.sh"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline text-orange-500"
               >
-                {saving === "Avatar URL" ? "Saving…" : "Save"}
-              </Button>
-            </div>
-            <TxidRow propertyKind={PROPERTY_AVATAR_URL} />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Bio</label>
-            <Textarea
-              placeholder="Tell the world who you are"
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              rows={3}
-              className="resize-none"
-              disabled={saving !== null}
-            />
-            <div className="flex items-center gap-2">
-              {(() => {
-                const c = fieldCost(bio);
-                return (
-                  c && (
-                    <span className="text-xs text-muted-foreground font-mono">
-                      ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
-                    </span>
-                  )
-                );
-              })()}
-              <Button
-                size="sm"
-                onClick={() => saveField(PROPERTY_BIO, bio, "Bio")}
-                disabled={saving !== null || !bio.trim()}
-              >
-                {saving === "Bio" ? "Saving…" : "Save Bio"}
-              </Button>
-            </div>
-            <TxidRow propertyKind={PROPERTY_BIO} />
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+                ors.sh
+              </a>{" "}
+              lets you update the destination at any time for free - without a
+              new transaction.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowOrsWarning(false);
+                saveField(PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL");
+              }}
+            >
+              Save anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
