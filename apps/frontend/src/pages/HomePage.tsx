@@ -42,7 +42,19 @@ export function HomePage({
   noteOgLeaderboard,
 }: HomePageProps) {
   const [tab, setTab] = useState<"global" | "following">("global");
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(() => localStorage.getItem("ors_draft_post") ?? "");
+  const [pendingPost, setPendingPost] = useState(() => !!localStorage.getItem("ors_pending_post"));
+
+  function handleContentChange(value: string) {
+    setContent(value);
+    if (value) {
+      localStorage.setItem("ors_draft_post", value);
+    } else {
+      localStorage.removeItem("ors_draft_post");
+      localStorage.removeItem("ors_pending_post");
+      setPendingPost(false);
+    }
+  }
 
   const showTabs =
     !!loggedInPubkey && !!followedPubkeys && followedPubkeys.size > 0;
@@ -57,7 +69,8 @@ export function HomePage({
           onPosted={onRefresh ?? (() => {})}
           onLogin={onLogin ?? (() => Promise.resolve(null))}
           content={content}
-          onContentChange={setContent}
+          onContentChange={handleContentChange}
+          pendingPost={pendingPost}
         />
         <Feed
           posts={posts}
@@ -89,7 +102,7 @@ export function HomePage({
         onPosted={onRefresh ?? (() => {})}
         onLogin={onLogin ?? (() => Promise.resolve(null))}
         content={content}
-        onContentChange={setContent}
+        onContentChange={handleContentChange}
       />
       <TabsContent value="global" className="mt-0">
         <Feed

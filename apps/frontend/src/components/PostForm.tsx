@@ -19,6 +19,7 @@ interface PostFormProps {
   onLogin: () => Promise<string | null>;
   content: string;
   onContentChange: (content: string) => void;
+  pendingPost?: boolean;
 }
 
 export function PostForm({
@@ -28,6 +29,7 @@ export function PostForm({
   onLogin,
   content,
   onContentChange,
+  pendingPost,
 }: PostFormProps) {
   const navigate = useNavigate();
   const [posting, setPosting] = useState(false);
@@ -84,6 +86,9 @@ export function PostForm({
     if (!content.trim()) return;
 
     if (!loggedInPubkey) {
+      if (content.trim()) {
+        localStorage.setItem("ors_pending_post", "true");
+      }
       navigate("/auth");
       return;
     }
@@ -95,6 +100,11 @@ export function PostForm({
     <div className="flex justify-start items-start gap-3 py-4 px-2 border-[1px] border-b-0">
       <div className="-mt-2">{avatar}</div>
       <div className="flex-1 space-y-2">
+        {pendingPost && loggedInPubkey && content.trim() && (
+          <p className="text-xs text-orange-500 font-medium">
+            You're signed in - tap Post to publish your draft.
+          </p>
+        )}
         <Textarea
           placeholder="What's worth mentioning?"
           value={content}
