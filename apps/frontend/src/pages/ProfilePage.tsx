@@ -122,13 +122,14 @@ export function ProfilePage({
   const load = useCallback(async () => {
     if (!pubkey) return;
     try {
-      const [data, followsData, followers, ogData, activity] = await Promise.all([
-        fetchPosts(50, 0, pubkey),
-        fetchFollows(pubkey),
-        fetchFollowers(pubkey),
-        fetchOgLeaderboard(),
-        fetchActivity(50, 0, pubkey),
-      ]);
+      const [data, followsData, followers, ogData, activity] =
+        await Promise.all([
+          fetchPosts(50, 0, pubkey),
+          fetchFollows(pubkey),
+          fetchFollowers(pubkey),
+          fetchOgLeaderboard(),
+          fetchActivity(50, 0, pubkey),
+        ]);
       setPosts(data);
       setProfileActivity(activity);
       setFollowingPubkeys([
@@ -161,18 +162,31 @@ export function ProfilePage({
     setFollowLoading(true);
     try {
       const version = getProtocolVersion();
-      const v0Unsigned = buildFollowUnsignedPayload(pubkey, newIsFollow, loggedInPubkey);
-      const signingPayload = version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
+      const v0Unsigned = buildFollowUnsignedPayload(
+        pubkey,
+        newIsFollow,
+        loggedInPubkey,
+      );
+      const signingPayload =
+        version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, loggedInPubkey);
-      const { invoice, paymentHash } = await submitFollow(pubkey, newIsFollow, loggedInPubkey, sig, version);
-      await payAndBroadcast(invoice, paymentHash);
+      const { invoice, paymentHash } = await submitFollow(
+        pubkey,
+        newIsFollow,
+        loggedInPubkey,
+        sig,
+        version,
+      );
+      const { txid } = await payAndBroadcast(invoice, paymentHash);
       onFollowChange?.();
       // Refresh local follower count
       const followers = await fetchFollowers(pubkey);
       setFollowerPubkeys([...followers.pubkeys, ...followers.pendingPubkeys]);
       setPendingFollowerPubkeys(new Set(followers.pendingPubkeys));
       setFollowerInfo(new Map(followers.follows.map((f) => [f.pubkey, f])));
-      toast.success(newIsFollow ? "Followed!" : "Unfollowed!");
+      toast.success(newIsFollow ? "Followed!" : "Unfollowed!", {
+        description: `TXID: ${txid}`,
+      });
     } catch (err) {
       toast.error((err as Error).message ?? "Failed");
     } finally {
@@ -315,17 +329,43 @@ export function ProfilePage({
 
             type TimelineEntry =
               | { kind: "post"; post: Post; timestamp: number; txid: string }
-              | { kind: "activity"; item: ActivityItem; timestamp: number; txid: string };
+              | {
+                  kind: "activity";
+                  item: ActivityItem;
+                  timestamp: number;
+                  txid: string;
+                };
 
             const merged: TimelineEntry[] = [
-              ...posts.map((p) => ({ kind: "post" as const, post: p, timestamp: p.timestamp, txid: p.txid })),
-              ...profileActivity.map((a) => ({ kind: "activity" as const, item: a, timestamp: a.timestamp, txid: a.txid })),
+              ...posts.map((p) => ({
+                kind: "post" as const,
+                post: p,
+                timestamp: p.timestamp,
+                txid: p.txid,
+              })),
+              ...profileActivity.map((a) => ({
+                kind: "activity" as const,
+                item: a,
+                timestamp: a.timestamp,
+                txid: a.txid,
+              })),
             ];
-            merged.sort((a, b) => b.timestamp - a.timestamp || a.txid.localeCompare(b.txid));
+            merged.sort(
+              (a, b) =>
+                b.timestamp - a.timestamp || a.txid.localeCompare(b.txid),
+            );
 
             return merged.map((entry) => {
               if (entry.kind === "activity") {
-                return <ActivityCard key={entry.txid} item={entry.item} profiles={profiles} loggedInPubkey={loggedInPubkey} onRefresh={load} />;
+                return (
+                  <ActivityCard
+                    key={entry.txid}
+                    item={entry.item}
+                    profiles={profiles}
+                    loggedInPubkey={loggedInPubkey}
+                    onRefresh={load}
+                  />
+                );
               }
               const post = entry.post;
               if (
@@ -350,14 +390,18 @@ export function ProfilePage({
                   />
                 );
               }
-              const parentPost = post.parentTxid ? (postsById[post.parentTxid] ?? null) : null;
+              const parentPost = post.parentTxid
+                ? (postsById[post.parentTxid] ?? null)
+                : null;
               return (
                 <PostCard
                   key={post.txid}
                   post={post}
                   profile={profiles[post.pubkey]}
                   parentPost={parentPost}
-                  parentProfile={parentPost ? profiles[parentPost.pubkey] : undefined}
+                  parentProfile={
+                    parentPost ? profiles[parentPost.pubkey] : undefined
+                  }
                   parentActivity={
                     post.parentTxid && !parentPost
                       ? (activityById[post.parentTxid] ?? null)
@@ -437,7 +481,10 @@ export function ProfilePage({
                 (() => {
                   const effectiveFeeRate = feeRate + getFeeBumpSatPerVByte();
                   // kindData for FOLLOW = targetPubkey(32) + action(1) = 33 bytes
-                  const sats = Math.ceil(estimatedVBytes(33, getProtocolVersion()) * effectiveFeeRate);
+                  const sats = Math.ceil(
+                    estimatedVBytes(33, getProtocolVersion()) *
+                      effectiveFeeRate,
+                  );
                   const usd =
                     btcPriceUsd !== null
                       ? ((sats * btcPriceUsd) / 1e8).toFixed(2)
@@ -532,7 +579,10 @@ export function ProfilePage({
                               : `Confirmed at block ${info.blockHeight}`}
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <TxidDropdownItem txid={info.txid} shortTxid={shortTxid} />
+                          <TxidDropdownItem
+                            txid={info.txid}
+                            shortTxid={shortTxid}
+                          />
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}

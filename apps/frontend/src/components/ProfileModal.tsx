@@ -13,7 +13,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { submitProfileUpdate } from "../api/facilitator";
 import { payAndBroadcast } from "../lib/payment";
-import { buildProfileUpdateUnsignedPayload, buildV1SigningBody, getProtocolVersion, estimatedVBytes } from "../lib/ors";
+import {
+  buildProfileUpdateUnsignedPayload,
+  buildV1SigningBody,
+  getProtocolVersion,
+  estimatedVBytes,
+} from "../lib/ors";
 import { getFeeBumpSatPerVByte } from "../lib/fees";
 import { signPayload } from "../lib/signing";
 import type { Profile } from "../types";
@@ -50,7 +55,8 @@ export function ProfileModal({
     const vBytes = estimatedVBytes(1 + valueBytes, getProtocolVersion());
     const effectiveFeeRate = feeRate + getFeeBumpSatPerVByte();
     const sats = Math.ceil(vBytes * effectiveFeeRate);
-    const usd = btcPriceUsd !== null ? ((sats * btcPriceUsd) / 1e8).toFixed(2) : null;
+    const usd =
+      btcPriceUsd !== null ? ((sats * btcPriceUsd) / 1e8).toFixed(2) : null;
     return { sats, usd };
   }
 
@@ -72,8 +78,13 @@ export function ProfileModal({
     setSaving(fieldName);
     try {
       const version = getProtocolVersion();
-      const v0Unsigned = buildProfileUpdateUnsignedPayload(propertyKind, value.trim(), loggedInPubkey);
-      const signingPayload = version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
+      const v0Unsigned = buildProfileUpdateUnsignedPayload(
+        propertyKind,
+        value.trim(),
+        loggedInPubkey,
+      );
+      const signingPayload =
+        version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, loggedInPubkey);
       const { invoice, paymentHash } = await submitProfileUpdate(
         propertyKind,
@@ -84,7 +95,9 @@ export function ProfileModal({
       );
       const { txid } = await payAndBroadcast(invoice, paymentHash);
 
-      toast.success(`${fieldName} saved! ${txid.slice(0, 16)}…`);
+      toast.success("${fieldName} saved", {
+        description: `TXID: ${txid}`,
+      });
       onProfileUpdated();
     } catch (err) {
       toast.error((err as Error).message);
@@ -115,7 +128,16 @@ export function ProfileModal({
                 onChange={(e) => setName(e.target.value)}
                 disabled={saving !== null}
               />
-              {(() => { const c = fieldCost(name); return c && <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}</span>; })()}
+              {(() => {
+                const c = fieldCost(name);
+                return (
+                  c && (
+                    <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">
+                      ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
+                    </span>
+                  )
+                );
+              })()}
               <Button
                 size="sm"
                 onClick={() => saveField(PROPERTY_NAME, name, "Name")}
@@ -135,7 +157,16 @@ export function ProfileModal({
                 onChange={(e) => setAvatarUrl(e.target.value)}
                 disabled={saving !== null}
               />
-              {(() => { const c = fieldCost(avatarUrl); return c && <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}</span>; })()}
+              {(() => {
+                const c = fieldCost(avatarUrl);
+                return (
+                  c && (
+                    <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">
+                      ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
+                    </span>
+                  )
+                );
+              })()}
               <Button
                 size="sm"
                 onClick={() =>
@@ -159,7 +190,16 @@ export function ProfileModal({
               disabled={saving !== null}
             />
             <div className="flex items-center gap-2">
-              {(() => { const c = fieldCost(bio); return c && <span className="text-xs text-muted-foreground font-mono">~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}</span>; })()}
+              {(() => {
+                const c = fieldCost(bio);
+                return (
+                  c && (
+                    <span className="text-xs text-muted-foreground font-mono">
+                      ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
+                    </span>
+                  )
+                );
+              })()}
               <Button
                 size="sm"
                 onClick={() => saveField(PROPERTY_BIO, bio, "Bio")}
