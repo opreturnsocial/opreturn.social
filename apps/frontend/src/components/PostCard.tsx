@@ -98,7 +98,6 @@ export function PostCard({
   const [repostOpen, setRepostOpen] = useState(false);
   const [noteLeaderboardOpen, setNoteLeaderboardOpen] = useState(false);
   const noteOgRank = noteOgLeaderboard?.find((n) => n.txid === post.txid)?.rank;
-  const shortTxid = `${post.txid.slice(0, 8)}...${post.txid.slice(-8)}`;
   const displayName = profile?.name ?? `${post.pubkey.slice(0, 8)}…`;
   const relativeTime = formatRelativeTime(post.timestamp);
 
@@ -214,7 +213,7 @@ export function PostCard({
                     : `Confirmed at block ${post.blockHeight}`}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <TxidDropdownItem txid={post.txid} shortTxid={shortTxid} />
+                <TxidDropdownItem txid={post.txid} />
                 {noteOgRank !== undefined && post.kind === KIND_TEXT_NOTE && (
                   <>
                     <DropdownMenuSeparator />

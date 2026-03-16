@@ -56,7 +56,6 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
   const profile = profiles[item.pubkey];
   const displayName = profile?.name ?? `${item.pubkey.slice(0, 8)}…`;
   const relativeTime = formatRelativeTime(item.timestamp);
-  const shortTxid = `${item.txid.slice(0, 8)}...${item.txid.slice(-8)}`;
 
   let displayLabel: string;
   let body: React.ReactNode;
@@ -142,7 +141,7 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
                   {item.blockHeight === 0 ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <TxidDropdownItem txid={item.txid} shortTxid={shortTxid} />
+                <TxidDropdownItem txid={item.txid} />
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

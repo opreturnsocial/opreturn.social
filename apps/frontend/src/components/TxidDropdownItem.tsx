@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { shortenTxid } from "@/lib/utils";
 
 interface TxidDropdownItemProps {
   txid: string;
-  shortTxid: string;
 }
 
-export function TxidDropdownItem({ txid, shortTxid }: TxidDropdownItemProps) {
+export function TxidDropdownItem({ txid }: TxidDropdownItemProps) {
+  const shortTxid = shortenTxid(txid);
   const [copied, setCopied] = useState(false);
 
   function handleCopy(e: React.MouseEvent) {

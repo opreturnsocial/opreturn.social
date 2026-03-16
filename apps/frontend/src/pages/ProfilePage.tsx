@@ -305,7 +305,6 @@ export function ProfilePage({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {Array.from(profileFieldTxids.entries()).map(([kind, item]) => {
-                  const shortTxid = `${item.txid.slice(0, 8)}...${item.txid.slice(-8)}`;
                   return (
                     <div key={kind}>
                       <DropdownMenuLabel className="text-xs font-normal">
@@ -315,7 +314,7 @@ export function ProfilePage({
                         </span>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <TxidDropdownItem txid={item.txid} shortTxid={shortTxid} />
+                      <TxidDropdownItem txid={item.txid} />
                     </div>
                   );
                 })}
@@ -563,9 +562,6 @@ export function ProfilePage({
                   followListModal === "followers"
                     ? followerInfo.get(pk)
                     : followingInfo.get(pk);
-                const shortTxid = info
-                  ? `${info.txid.slice(0, 8)}...${info.txid.slice(-8)}`
-                  : null;
                 return (
                   <div
                     key={pk}
@@ -619,7 +615,6 @@ export function ProfilePage({
                           <DropdownMenuSeparator />
                           <TxidDropdownItem
                             txid={info.txid}
-                            shortTxid={shortTxid}
                           />
                         </DropdownMenuContent>
                       </DropdownMenu>
