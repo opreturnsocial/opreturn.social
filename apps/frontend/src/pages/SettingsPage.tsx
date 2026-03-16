@@ -70,7 +70,9 @@ export function SettingsPage() {
   function handleFeeBumpChange(v: number) {
     localStorage.setItem("ors_fee_bump_sat_per_vbyte", String(v));
     setFeeBumpState(v);
-    toast.success(v === 0 ? "Fee bump reset to 0" : `Fee bump set to +${v} sat/vB`);
+    toast.success(
+      v === 0 ? "Fee bump reset to 0" : `Fee bump set to +${v} sat/vB`,
+    );
   }
 
   function handleVersionChange(v: number) {
@@ -176,7 +178,8 @@ export function SettingsPage() {
         </CardHeader>
         <CardContent className="pt-0 space-y-3">
           <p className="text-xs text-muted-foreground">
-            Add extra sat/vB on top of the estimated network fee rate to prioritise confirmation speed.
+            Add extra sat/vB on top of the estimated network fee rate to
+            prioritise confirmation speed.
           </p>
           <div className="flex gap-2">
             {[0, 1, 2, 5, 10].map((v) => (
@@ -244,6 +247,18 @@ export function SettingsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <p className="text-xs text-muted-foreground text-center pt-2">
+        Commit {__COMMIT_HASH__} &bull;{" "}
+        <a
+          href="https://github.com/opreturnsocial/opreturn.social/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium hover:text-foreground transition-colors"
+        >
+          GitHub
+        </a>
+      </p>
     </div>
   );
 }
