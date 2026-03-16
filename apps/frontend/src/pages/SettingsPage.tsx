@@ -56,7 +56,10 @@ function SecretRow({
   );
 }
 
-const donationAddress = import.meta.env.VITE_FACILITATOR_DONATION_ADDRESS as string | undefined;
+const donationAddress = import.meta.env.VITE_FACILITATOR_DONATION_ADDRESS as
+  | string
+  | undefined;
+const allowBroadcastV0 = import.meta.env.VITE_ALLOW_BROADCAST_V0 === "true";
 
 export function SettingsPage() {
   const [hasNwcUrl, setHasNwcUrl] = useState(
@@ -78,6 +81,10 @@ export function SettingsPage() {
   }
 
   function handleVersionChange(v: number) {
+    if (v === 0 && !allowBroadcastV0) {
+      toast.error("v0 broadcasting is currently disabled.");
+      return;
+    }
     localStorage.setItem("ors_protocol_version", String(v));
     setProtocolVersionState(v);
     toast.success(`Protocol version set to v${v}`);
@@ -264,10 +271,14 @@ export function SettingsPage() {
                 {donationAddress}
               </p>
               <div className="flex gap-2 shrink-0">
-                <Button variant="outline" size="sm" onClick={() => {
-                  navigator.clipboard.writeText(donationAddress);
-                  toast.success("Copied!");
-                }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(donationAddress);
+                    toast.success("Copied!");
+                  }}
+                >
                   <Copy className="h-3.5 w-3.5 mr-1.5" />
                   Copy
                 </Button>
