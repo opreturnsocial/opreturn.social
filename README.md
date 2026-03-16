@@ -1,8 +1,12 @@
 # opreturn.social
 
-ORS Reference Client with Cache and Lightning Payments Facilitator
+> _Freedom is not free_
+
+The first official [ORS](https://github.com/opreturnsocial) client.
 
 **[Try it now](https://opreturn.social)**
+
+This client includes a cache and lightning payments facilitator to simplify UX.
 
 ## Documentation
 
