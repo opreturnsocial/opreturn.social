@@ -141,6 +141,58 @@ async function preparePending(
   };
 }
 
+const MAX_CHUNKS_PER_REQUEST = 5;
+
+function parseFeeBump(fbRaw: unknown): number {
+  return (typeof fbRaw === "number" && fbRaw >= 0 ? fbRaw : 0) / 1e5;
+}
+
+async function handleAction(
+  action: string,
+  protocolVersion: number,
+  feeBumpBtcPerKb: number,
+  buildV0: () => string,
+  buildV1: () => string[],
+  requestBody: object,
+  res: express.Response,
+): Promise<void> {
+  try {
+    const feerate = await getFeeRate();
+    const effectiveFeeRate = feerate + feeBumpBtcPerKb;
+    let estimatedFeeSats: number;
+    let payloadHex: string;
+    let chunksJson: string | undefined;
+
+    if (protocolVersion === 0) {
+      payloadHex = buildV0();
+      estimatedFeeSats = calcEstimatedFeeSats(payloadHex, effectiveFeeRate);
+    } else {
+      const chunks = buildV1();
+      if (chunks.length > MAX_CHUNKS_PER_REQUEST) {
+        res.status(400).json({ error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}` });
+        return;
+      }
+      chunksJson = JSON.stringify(chunks);
+      payloadHex = "";
+      estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
+    }
+
+    const result = await preparePending(
+      action,
+      payloadHex,
+      estimatedFeeSats,
+      effectiveFeeRate,
+      requestBody,
+      protocolVersion,
+      chunksJson,
+    );
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error(`[facilitator] ${action} error:`, err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+}
+
 // Serialised promise queue for the build+broadcast critical section.
 // Ensures simultaneous confirms process one at a time so the second
 // can spend the change output produced by the first.
@@ -174,370 +226,135 @@ export function createServer() {
   });
 
   app.post("/post", async (req, res) => {
-    const {
-      content,
-      pubkey,
-      sig,
-      protocolVersion: pv,
-      feeBumpSatPerVByte: fbRaw,
-    } = req.body as {
-      content?: string;
-      pubkey?: string;
-      sig?: string;
-      protocolVersion?: number;
-      feeBumpSatPerVByte?: number;
+    const { content, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
+      content?: string; pubkey?: string; sig?: string;
+      protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
-    const feeBumpBtcPerKb = (typeof fbRaw === "number" && fbRaw >= 0 ? fbRaw : 0) / 1e5;
+    const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!content || !pubkey || !sig) {
       res.status(400).json({ error: "content, pubkey, and sig are required" });
       return;
     }
 
-    try {
-      const feerate = await getFeeRate();
-      const effectiveFeeRate = feerate + feeBumpBtcPerKb;
-      let estimatedFeeSats: number;
-      let payloadHex: string;
-      let chunksJson: string | undefined;
-
-      if (protocolVersion === 0) {
-        payloadHex = buildPayload(content, pubkey, sig);
-        estimatedFeeSats = calcEstimatedFeeSats(payloadHex, effectiveFeeRate);
-      } else {
-        const chunks = buildPayloadV1(content, pubkey, sig);
-        chunksJson = JSON.stringify(chunks);
-        payloadHex = "";
-        estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
-      }
-
-      const result = await preparePending(
-        "post",
-        payloadHex,
-        estimatedFeeSats,
-        effectiveFeeRate,
-        { content, pubkey, sig, protocolVersion },
-        protocolVersion,
-        chunksJson,
-      );
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      console.error("[facilitator] post error:", err);
-      res.status(500).json({ error: (err as Error).message });
-    }
+    await handleAction(
+      "post", protocolVersion, feeBumpBtcPerKb,
+      () => buildPayload(content, pubkey, sig),
+      () => buildPayloadV1(content, pubkey, sig),
+      { content, pubkey, sig, protocolVersion },
+      res,
+    );
   });
 
   app.post("/reply", async (req, res) => {
-    const {
-      content,
-      pubkey,
-      sig,
-      parentTxid,
-      protocolVersion: pv,
-      feeBumpSatPerVByte: fbRaw,
-    } = req.body as {
-      content?: string;
-      pubkey?: string;
-      sig?: string;
-      parentTxid?: string;
-      protocolVersion?: number;
-      feeBumpSatPerVByte?: number;
+    const { content, pubkey, sig, parentTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
+      content?: string; pubkey?: string; sig?: string; parentTxid?: string;
+      protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
-    const feeBumpBtcPerKb = (typeof fbRaw === "number" && fbRaw >= 0 ? fbRaw : 0) / 1e5;
+    const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!content || !pubkey || !sig || !parentTxid) {
-      res
-        .status(400)
-        .json({ error: "content, pubkey, sig, and parentTxid are required" });
+      res.status(400).json({ error: "content, pubkey, sig, and parentTxid are required" });
       return;
     }
 
-    try {
-      const feerate = await getFeeRate();
-      const effectiveFeeRate = feerate + feeBumpBtcPerKb;
-      let estimatedFeeSats: number;
-      let payloadHex: string;
-      let chunksJson: string | undefined;
-
-      if (protocolVersion === 0) {
-        payloadHex = buildPayloadReply(content, pubkey, sig, parentTxid);
-        estimatedFeeSats = calcEstimatedFeeSats(payloadHex, effectiveFeeRate);
-      } else {
-        const chunks = buildPayloadReplyV1(content, pubkey, sig, parentTxid);
-        chunksJson = JSON.stringify(chunks);
-        payloadHex = "";
-        estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
-      }
-
-      const result = await preparePending(
-        "reply",
-        payloadHex,
-        estimatedFeeSats,
-        effectiveFeeRate,
-        { content, pubkey, sig, parentTxid, protocolVersion },
-        protocolVersion,
-        chunksJson,
-      );
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      console.error("[facilitator] reply error:", err);
-      res.status(500).json({ error: (err as Error).message });
-    }
+    await handleAction(
+      "reply", protocolVersion, feeBumpBtcPerKb,
+      () => buildPayloadReply(content, pubkey, sig, parentTxid),
+      () => buildPayloadReplyV1(content, pubkey, sig, parentTxid),
+      { content, pubkey, sig, parentTxid, protocolVersion },
+      res,
+    );
   });
 
   app.post("/repost", async (req, res) => {
-    const {
-      pubkey,
-      sig,
-      referencedTxid,
-      protocolVersion: pv,
-      feeBumpSatPerVByte: fbRaw,
-    } = req.body as {
-      pubkey?: string;
-      sig?: string;
-      referencedTxid?: string;
-      protocolVersion?: number;
-      feeBumpSatPerVByte?: number;
+    const { pubkey, sig, referencedTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
+      pubkey?: string; sig?: string; referencedTxid?: string;
+      protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
-    const feeBumpBtcPerKb = (typeof fbRaw === "number" && fbRaw >= 0 ? fbRaw : 0) / 1e5;
+    const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!pubkey || !sig || !referencedTxid) {
-      res
-        .status(400)
-        .json({ error: "pubkey, sig, and referencedTxid are required" });
+      res.status(400).json({ error: "pubkey, sig, and referencedTxid are required" });
       return;
     }
 
-    try {
-      const feerate = await getFeeRate();
-      const effectiveFeeRate = feerate + feeBumpBtcPerKb;
-      let estimatedFeeSats: number;
-      let payloadHex: string;
-      let chunksJson: string | undefined;
-
-      if (protocolVersion === 0) {
-        payloadHex = buildPayloadRepost(pubkey, sig, referencedTxid);
-        estimatedFeeSats = calcEstimatedFeeSats(payloadHex, effectiveFeeRate);
-      } else {
-        const chunks = buildPayloadRepostV1(pubkey, sig, referencedTxid);
-        chunksJson = JSON.stringify(chunks);
-        payloadHex = "";
-        estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
-      }
-
-      const result = await preparePending(
-        "repost",
-        payloadHex,
-        estimatedFeeSats,
-        effectiveFeeRate,
-        { pubkey, sig, referencedTxid, protocolVersion },
-        protocolVersion,
-        chunksJson,
-      );
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      console.error("[facilitator] repost error:", err);
-      res.status(500).json({ error: (err as Error).message });
-    }
+    await handleAction(
+      "repost", protocolVersion, feeBumpBtcPerKb,
+      () => buildPayloadRepost(pubkey, sig, referencedTxid),
+      () => buildPayloadRepostV1(pubkey, sig, referencedTxid),
+      { pubkey, sig, referencedTxid, protocolVersion },
+      res,
+    );
   });
 
   app.post("/quote-repost", async (req, res) => {
-    const {
-      content,
-      pubkey,
-      sig,
-      referencedTxid,
-      protocolVersion: pv,
-      feeBumpSatPerVByte: fbRaw,
-    } = req.body as {
-      content?: string;
-      pubkey?: string;
-      sig?: string;
-      referencedTxid?: string;
-      protocolVersion?: number;
-      feeBumpSatPerVByte?: number;
+    const { content, pubkey, sig, referencedTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
+      content?: string; pubkey?: string; sig?: string; referencedTxid?: string;
+      protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
-    const feeBumpBtcPerKb = (typeof fbRaw === "number" && fbRaw >= 0 ? fbRaw : 0) / 1e5;
+    const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!content || !pubkey || !sig || !referencedTxid) {
-      res
-        .status(400)
-        .json({
-          error: "content, pubkey, sig, and referencedTxid are required",
-        });
+      res.status(400).json({ error: "content, pubkey, sig, and referencedTxid are required" });
       return;
     }
 
-    try {
-      const feerate = await getFeeRate();
-      const effectiveFeeRate = feerate + feeBumpBtcPerKb;
-      let estimatedFeeSats: number;
-      let payloadHex: string;
-      let chunksJson: string | undefined;
-
-      if (protocolVersion === 0) {
-        payloadHex = buildPayloadQuoteRepost(
-          content,
-          pubkey,
-          sig,
-          referencedTxid,
-        );
-        estimatedFeeSats = calcEstimatedFeeSats(payloadHex, effectiveFeeRate);
-      } else {
-        const chunks = buildPayloadQuoteRepostV1(
-          content,
-          pubkey,
-          sig,
-          referencedTxid,
-        );
-        chunksJson = JSON.stringify(chunks);
-        payloadHex = "";
-        estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
-      }
-
-      const result = await preparePending(
-        "quote-repost",
-        payloadHex,
-        estimatedFeeSats,
-        effectiveFeeRate,
-        { content, pubkey, sig, referencedTxid, protocolVersion },
-        protocolVersion,
-        chunksJson,
-      );
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      console.error("[facilitator] quote-repost error:", err);
-      res.status(500).json({ error: (err as Error).message });
-    }
+    await handleAction(
+      "quote-repost", protocolVersion, feeBumpBtcPerKb,
+      () => buildPayloadQuoteRepost(content, pubkey, sig, referencedTxid),
+      () => buildPayloadQuoteRepostV1(content, pubkey, sig, referencedTxid),
+      { content, pubkey, sig, referencedTxid, protocolVersion },
+      res,
+    );
   });
 
   app.post("/follow", async (req, res) => {
-    const {
-      targetPubkey,
-      isFollow,
-      pubkey,
-      sig,
-      protocolVersion: pv,
-      feeBumpSatPerVByte: fbRaw,
-    } = req.body as {
-      targetPubkey?: string;
-      isFollow?: boolean;
-      pubkey?: string;
-      sig?: string;
-      protocolVersion?: number;
-      feeBumpSatPerVByte?: number;
+    const { targetPubkey, isFollow, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
+      targetPubkey?: string; isFollow?: boolean; pubkey?: string; sig?: string;
+      protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
-    const feeBumpBtcPerKb = (typeof fbRaw === "number" && fbRaw >= 0 ? fbRaw : 0) / 1e5;
+    const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (!targetPubkey || typeof isFollow !== "boolean" || !pubkey || !sig) {
-      res
-        .status(400)
-        .json({
-          error: "targetPubkey, isFollow, pubkey, and sig are required",
-        });
+      res.status(400).json({ error: "targetPubkey, isFollow, pubkey, and sig are required" });
       return;
     }
 
-    try {
-      const feerate = await getFeeRate();
-      const effectiveFeeRate = feerate + feeBumpBtcPerKb;
-      let estimatedFeeSats: number;
-      let payloadHex: string;
-      let chunksJson: string | undefined;
-
-      if (protocolVersion === 0) {
-        payloadHex = buildPayloadFollow(targetPubkey, isFollow, pubkey, sig);
-        estimatedFeeSats = calcEstimatedFeeSats(payloadHex, effectiveFeeRate);
-      } else {
-        const chunks = buildPayloadFollowV1(
-          targetPubkey,
-          isFollow,
-          pubkey,
-          sig,
-        );
-        chunksJson = JSON.stringify(chunks);
-        payloadHex = "";
-        estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
-      }
-
-      const result = await preparePending(
-        "follow",
-        payloadHex,
-        estimatedFeeSats,
-        effectiveFeeRate,
-        { targetPubkey, isFollow, pubkey, sig, protocolVersion },
-        protocolVersion,
-        chunksJson,
-      );
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      console.error("[facilitator] follow error:", err);
-      res.status(500).json({ error: (err as Error).message });
-    }
+    await handleAction(
+      "follow", protocolVersion, feeBumpBtcPerKb,
+      () => buildPayloadFollow(targetPubkey, isFollow, pubkey, sig),
+      () => buildPayloadFollowV1(targetPubkey, isFollow, pubkey, sig),
+      { targetPubkey, isFollow, pubkey, sig, protocolVersion },
+      res,
+    );
   });
 
   app.post("/profile", async (req, res) => {
-    const {
-      propertyKind,
-      value,
-      pubkey,
-      sig,
-      protocolVersion: pv,
-      feeBumpSatPerVByte: fbRaw,
-    } = req.body as {
-      propertyKind?: number;
-      value?: string;
-      pubkey?: string;
-      sig?: string;
-      protocolVersion?: number;
-      feeBumpSatPerVByte?: number;
+    const { propertyKind, value, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
+      propertyKind?: number; value?: string; pubkey?: string; sig?: string;
+      protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     const protocolVersion = pv ?? 1;
-    const feeBumpBtcPerKb = (typeof fbRaw === "number" && fbRaw >= 0 ? fbRaw : 0) / 1e5;
+    const feeBumpBtcPerKb = parseFeeBump(fbRaw);
 
     if (typeof propertyKind !== "number" || !value || !pubkey || !sig) {
-      res
-        .status(400)
-        .json({ error: "propertyKind, value, pubkey, and sig are required" });
+      res.status(400).json({ error: "propertyKind, value, pubkey, and sig are required" });
       return;
     }
 
-    try {
-      const feerate = await getFeeRate();
-      const effectiveFeeRate = feerate + feeBumpBtcPerKb;
-      let estimatedFeeSats: number;
-      let payloadHex: string;
-      let chunksJson: string | undefined;
-
-      if (protocolVersion === 0) {
-        payloadHex = buildPayloadProfile(propertyKind, value, pubkey, sig);
-        estimatedFeeSats = calcEstimatedFeeSats(payloadHex, effectiveFeeRate);
-      } else {
-        const chunks = buildPayloadProfileV1(propertyKind, value, pubkey, sig);
-        chunksJson = JSON.stringify(chunks);
-        payloadHex = "";
-        estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
-      }
-
-      const result = await preparePending(
-        "profile",
-        payloadHex,
-        estimatedFeeSats,
-        effectiveFeeRate,
-        { propertyKind, value, pubkey, sig, protocolVersion },
-        protocolVersion,
-        chunksJson,
-      );
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      console.error("[facilitator] profile error:", err);
-      res.status(500).json({ error: (err as Error).message });
-    }
+    await handleAction(
+      "profile", protocolVersion, feeBumpBtcPerKb,
+      () => buildPayloadProfile(propertyKind, value, pubkey, sig),
+      () => buildPayloadProfileV1(propertyKind, value, pubkey, sig),
+      { propertyKind, value, pubkey, sig, protocolVersion },
+      res,
+    );
   });
 
   app.get("/status/:paymentHash", async (req, res) => {

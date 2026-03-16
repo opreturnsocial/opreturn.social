@@ -3,7 +3,7 @@
  * Format: ORS\x00 + pubkey(32) + kind(1) + kind-specific data  — no sig slot
  */
 
-export const MAX_CONTENT_BYTES = 280;
+export const MAX_CONTENT_BYTES = 277;
 
 // ORS\x00
 const MAGIC = new Uint8Array([0x4f, 0x52, 0x53, 0x00]);

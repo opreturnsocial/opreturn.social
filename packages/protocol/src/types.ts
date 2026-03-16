@@ -31,7 +31,7 @@ export const PARENT_TXID_BYTES = 32;
 export const PARENT_TXID_OFFSET = 101;
 export const REPLY_CONTENT_OFFSET = 133;
 
-export const MAX_CONTENT_BYTES = 280;
+export const MAX_CONTENT_BYTES = 277;
 
 // Profile property kind values
 export const PROPERTY_NAME = 0x00;
