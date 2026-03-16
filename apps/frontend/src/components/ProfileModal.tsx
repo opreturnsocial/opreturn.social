@@ -48,7 +48,9 @@ export function ProfileModal({
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl ?? "");
   const [saving, setSaving] = useState<string | null>(null);
-  const [fieldActivity, setFieldActivity] = useState<Map<number, ActivityItem>>(new Map());
+  const [fieldActivity, setFieldActivity] = useState<Map<number, ActivityItem>>(
+    new Map(),
+  );
   const [copiedField, setCopiedField] = useState<number | null>(null);
   const { feeRate, btcPriceUsd } = useNetworkStats();
 
@@ -69,15 +71,20 @@ export function ProfileModal({
       setName(profile?.name ?? "");
       setBio(profile?.bio ?? "");
       setAvatarUrl(profile?.avatarUrl ?? "");
-      fetchActivity(50, 0, loggedInPubkey).then((items) => {
-        const map = new Map<number, ActivityItem>();
-        for (const item of items) {
-          if (item.type === "profile_update" && item.propertyKind !== undefined) {
-            if (!map.has(item.propertyKind)) map.set(item.propertyKind, item);
+      fetchActivity(50, 0, loggedInPubkey)
+        .then((items) => {
+          const map = new Map<number, ActivityItem>();
+          for (const item of items) {
+            if (
+              item.type === "profile_update" &&
+              item.propertyKind !== undefined
+            ) {
+              if (!map.has(item.propertyKind)) map.set(item.propertyKind, item);
+            }
           }
-        }
-        setFieldActivity(map);
-      }).catch(() => {});
+          setFieldActivity(map);
+        })
+        .catch(() => {});
     }
   }, [open, profile, loggedInPubkey]);
 
@@ -93,7 +100,9 @@ export function ProfileModal({
         ) : (
           <Check className="h-3 w-3 shrink-0 text-green-500" />
         )}
-        <span>{isPending ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}</span>
+        <span>
+          {isPending ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}
+        </span>
         <span className="opacity-60">{shortTxid}</span>
         <button
           className="text-muted-foreground hover:text-foreground transition-colors"
@@ -103,11 +112,17 @@ export function ProfileModal({
             setTimeout(() => setCopiedField(null), 1500);
           }}
         >
-          {copiedField === propertyKind ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+          {copiedField === propertyKind ? (
+            <Check className="h-3 w-3 text-green-500" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
         </button>
         <button
           className="text-muted-foreground hover:text-foreground transition-colors"
-          onClick={() => window.open(`https://mempool.space/tx/${item.txid}`, "_blank")}
+          onClick={() =>
+            window.open(`https://mempool.space/tx/${item.txid}`, "_blank")
+          }
         >
           <ExternalLink className="h-3 w-3" />
         </button>
@@ -142,7 +157,7 @@ export function ProfileModal({
       );
       const { txid } = await payAndBroadcast(invoice, paymentHash);
 
-      toast.success("${fieldName} saved", {
+      toast.success(`${fieldName} saved`, {
         description: `TXID: ${txid}`,
       });
       onProfileUpdated();
