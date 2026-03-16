@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Copy } from "lucide-react";
+import { Copy, ExternalLink } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +55,8 @@ function SecretRow({
     </div>
   );
 }
+
+const donationAddress = import.meta.env.VITE_FACILITATOR_DONATION_ADDRESS as string | undefined;
 
 export function SettingsPage() {
   const [hasNwcUrl, setHasNwcUrl] = useState(
@@ -247,6 +249,43 @@ export function SettingsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {donationAddress && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Support</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-xs text-muted-foreground mb-3">
+              Help keep the facilitator running by donating bitcoin on-chain.
+            </p>
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-mono text-muted-foreground truncate">
+                {donationAddress}
+              </p>
+              <div className="flex gap-2 shrink-0">
+                <Button variant="outline" size="sm" onClick={() => {
+                  navigator.clipboard.writeText(donationAddress);
+                  toast.success("Copied!");
+                }}>
+                  <Copy className="h-3.5 w-3.5 mr-1.5" />
+                  Copy
+                </Button>
+                <a
+                  href={`https://mempool.space/address/${donationAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" size="sm">
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                    View
+                  </Button>
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <p className="text-xs text-muted-foreground text-center pt-2">
         Commit {__COMMIT_HASH__} &bull;{" "}
