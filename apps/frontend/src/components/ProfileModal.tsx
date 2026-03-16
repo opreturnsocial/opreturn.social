@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Clock } from "lucide-react";
+import { Clock, Check, Copy, ExternalLink } from "lucide-react";
+import { fetchActivity } from "../api/cache";
+import type { ActivityItem } from "../types";
 import { useNetworkStats } from "../hooks/useNetworkStats";
 import {
   Dialog,
@@ -46,6 +48,8 @@ export function ProfileModal({
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl ?? "");
   const [saving, setSaving] = useState<string | null>(null);
+  const [fieldActivity, setFieldActivity] = useState<Map<number, ActivityItem>>(new Map());
+  const [copiedField, setCopiedField] = useState<number | null>(null);
   const { feeRate, btcPriceUsd } = useNetworkStats();
 
   function fieldCost(value: string) {
@@ -65,8 +69,51 @@ export function ProfileModal({
       setName(profile?.name ?? "");
       setBio(profile?.bio ?? "");
       setAvatarUrl(profile?.avatarUrl ?? "");
+      fetchActivity(50, 0, loggedInPubkey).then((items) => {
+        const map = new Map<number, ActivityItem>();
+        for (const item of items) {
+          if (item.type === "profile_update" && item.propertyKind !== undefined) {
+            if (!map.has(item.propertyKind)) map.set(item.propertyKind, item);
+          }
+        }
+        setFieldActivity(map);
+      }).catch(() => {});
     }
-  }, [open, profile]);
+  }, [open, profile, loggedInPubkey]);
+
+  function TxidRow({ propertyKind }: { propertyKind: number }) {
+    const item = fieldActivity.get(propertyKind);
+    if (!item) return null;
+    const shortTxid = `${item.txid.slice(0, 8)}...${item.txid.slice(-8)}`;
+    const isPending = item.blockHeight === 0;
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono mt-1">
+        {isPending ? (
+          <Clock className="h-3 w-3 shrink-0" />
+        ) : (
+          <Check className="h-3 w-3 shrink-0 text-green-500" />
+        )}
+        <span>{isPending ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}</span>
+        <span className="opacity-60">{shortTxid}</span>
+        <button
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          onClick={() => {
+            navigator.clipboard.writeText(item.txid);
+            setCopiedField(propertyKind);
+            setTimeout(() => setCopiedField(null), 1500);
+          }}
+        >
+          {copiedField === propertyKind ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+        </button>
+        <button
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          onClick={() => window.open(`https://mempool.space/tx/${item.txid}`, "_blank")}
+        >
+          <ExternalLink className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
 
   async function saveField(
     propertyKind: number,
@@ -146,6 +193,7 @@ export function ProfileModal({
                 {saving === "Name" ? "Saving…" : "Save"}
               </Button>
             </div>
+            <TxidRow propertyKind={PROPERTY_NAME} />
           </div>
 
           <div className="space-y-1">
@@ -177,6 +225,7 @@ export function ProfileModal({
                 {saving === "Avatar URL" ? "Saving…" : "Save"}
               </Button>
             </div>
+            <TxidRow propertyKind={PROPERTY_AVATAR_URL} />
           </div>
 
           <div className="space-y-1">
@@ -208,6 +257,7 @@ export function ProfileModal({
                 {saving === "Bio" ? "Saving…" : "Save Bio"}
               </Button>
             </div>
+            <TxidRow propertyKind={PROPERTY_BIO} />
           </div>
         </div>
       </DialogContent>

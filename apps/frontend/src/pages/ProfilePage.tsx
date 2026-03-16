@@ -285,6 +285,44 @@ export function ProfilePage({
             </button>
           </div>
         </div>
+        {(() => {
+          const FIELD_NAMES: Record<number, string> = { 0: "Name", 1: "Avatar URL", 2: "Bio" };
+          const profileFieldTxids = new Map<number, ActivityItem>();
+          for (const item of profileActivity) {
+            if (item.type === "profile_update" && item.propertyKind !== undefined) {
+              if (!profileFieldTxids.has(item.propertyKind)) {
+                profileFieldTxids.set(item.propertyKind, item);
+              }
+            }
+          }
+          if (profileFieldTxids.size === 0) return null;
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {Array.from(profileFieldTxids.entries()).map(([kind, item]) => {
+                  const shortTxid = `${item.txid.slice(0, 8)}...${item.txid.slice(-8)}`;
+                  return (
+                    <div key={kind}>
+                      <DropdownMenuLabel className="text-xs font-normal">
+                        <span className="font-medium">{FIELD_NAMES[kind] ?? `Field ${kind}`}</span>
+                        <span className="text-muted-foreground ml-1">
+                          - {item.blockHeight === 0 ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}
+                        </span>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <TxidDropdownItem txid={item.txid} shortTxid={shortTxid} />
+                    </div>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })()}
       </div>
 
       {loading ? (
