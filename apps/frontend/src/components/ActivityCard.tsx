@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { Clock, MessageCircle, MoreHorizontal, Repeat2Icon, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { RepostModal } from "./RepostModal";
+import { TxidDropdownItem } from "./TxidDropdownItem";
 import { formatRelativeTime } from "../lib/utils";
 import type { ActivityItem, Profile } from "../types";
 
@@ -142,14 +142,7 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
                   {item.blockHeight === 0 ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="font-mono text-xs"
-                  onClick={() => navigator.clipboard.writeText(item.txid)}
-                >
-                  <span className="text-muted-foreground mr-2">TXID</span>
-                  <span className="mr-2">{shortTxid}</span>
-                  <Badge variant="secondary" className="ml-auto text-xs">Copy</Badge>
-                </DropdownMenuItem>
+                <TxidDropdownItem txid={item.txid} shortTxid={shortTxid} />
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

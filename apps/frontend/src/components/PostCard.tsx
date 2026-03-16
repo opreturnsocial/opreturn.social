@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { RepostModal } from "./RepostModal";
+import { TxidDropdownItem } from "./TxidDropdownItem";
 import { formatRelativeTime } from "../lib/utils";
 import { KIND_TEXT_NOTE, KIND_TEXT_REPLY, KIND_QUOTE_REPOST } from "../lib/ors";
 import type { Post, Profile, ActivityItem } from "../types";
@@ -214,16 +214,7 @@ export function PostCard({
                     : `Confirmed at block ${post.blockHeight}`}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="font-mono text-xs"
-                  onClick={() => navigator.clipboard.writeText(post.txid)}
-                >
-                  <span className="text-muted-foreground mr-2">TXID</span>
-                  <span className="mr-2">{shortTxid}</span>
-                  <Badge variant="secondary" className="ml-auto text-xs">
-                    Copy
-                  </Badge>
-                </DropdownMenuItem>
+                <TxidDropdownItem txid={post.txid} shortTxid={shortTxid} />
                 {noteOgRank !== undefined && post.kind === KIND_TEXT_NOTE && (
                   <>
                     <DropdownMenuSeparator />

@@ -3,7 +3,6 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { Clock, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -31,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PostCard } from "../components/PostCard";
+import { TxidDropdownItem } from "../components/TxidDropdownItem";
 import { RepostCard } from "../components/RepostCard";
 import { ActivityCard } from "../components/ActivityCard";
 import {
@@ -532,23 +532,7 @@ export function ProfilePage({
                               : `Confirmed at block ${info.blockHeight}`}
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="font-mono text-xs"
-                            onClick={() =>
-                              navigator.clipboard.writeText(info.txid)
-                            }
-                          >
-                            <span className="text-muted-foreground mr-2">
-                              TXID
-                            </span>
-                            {shortTxid}
-                            <Badge
-                              variant="secondary"
-                              className="ml-auto text-xs"
-                            >
-                              Copy
-                            </Badge>
-                          </DropdownMenuItem>
+                          <TxidDropdownItem txid={info.txid} shortTxid={shortTxid} />
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
