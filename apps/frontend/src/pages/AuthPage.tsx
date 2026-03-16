@@ -239,7 +239,9 @@ function SignupWelcomeView({
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold">Welcome to OP_RETURN SOCIAL</h1>
-            <p className="text-muted-foreground">A permissionless social protocol built on bitcoin</p>
+            <p className="text-muted-foreground">
+              A permissionless social protocol built on bitcoin
+            </p>
           </div>
 
           <div className="space-y-4">
@@ -355,7 +357,7 @@ function SignupChoiceView({
                       await onLoginWithExtension();
                     } else {
                       window.open(
-                        "https://getalby.com/alby-extension",
+                        "https://getalby.com/alby-extension?ref=opreturn.social",
                         "_blank",
                       );
                     }
@@ -514,7 +516,10 @@ function LoginChoiceView({
                 if ((window as unknown as { alby?: unknown }).alby) {
                   await onLoginWithExtension();
                 } else {
-                  window.open("https://getalby.com/alby-extension", "_blank");
+                  window.open(
+                    "https://getalby.com/alby-extension?ref=opreturn.social",
+                    "_blank",
+                  );
                 }
               }}
             >
