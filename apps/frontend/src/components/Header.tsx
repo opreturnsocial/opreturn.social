@@ -86,23 +86,20 @@ export function Header({
           <Skeleton className="h-5 w-16 rounded-full" />
         )}
         <div className="flex items-center gap-3">
-          {loggedInPubkey !== null &&
-            walletBalance != null &&
-            (onTopUp ? (
-              <button
-                onClick={onTopUp}
-                className="flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                title="Top up wallet"
-              >
-                <Wallet className="h-3.5 w-3.5" />
-                {walletBalance.toLocaleString()} sats
-              </button>
-            ) : (
-              <span className="flex items-center gap-1 text-xs font-mono text-muted-foreground">
-                <Wallet className="h-3.5 w-3.5" />
-                {walletBalance.toLocaleString()} sats
-              </span>
-            ))}
+          {loggedInPubkey !== null && walletBalance !== undefined && (
+            <button
+              onClick={onTopUp}
+              className="flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              title="Top up wallet"
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              {walletBalance != null ? (
+                `${walletBalance.toLocaleString()} sats`
+              ) : (
+                <Skeleton className="h-3.5 w-12 inline-block" />
+              )}
+            </button>
+          )}
           {loggedInPubkey === null ? (
             <button
               onClick={onNavigateToAuth}

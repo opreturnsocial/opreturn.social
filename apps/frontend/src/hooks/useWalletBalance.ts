@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NWCClient } from "@getalby/sdk/nwc";
 
-export function useWalletBalance(): [number | null, () => void] {
-  const [balanceSats, setBalanceSats] = useState<number | null>(null);
+export function useWalletBalance(): [number | null | undefined, () => void] {
+  const [balanceSats, setBalanceSats] = useState<number | null | undefined>(
+    () => (localStorage.getItem("ors_nwc_url") ? null : undefined)
+  );
   const clientRef = useRef<NWCClient | null>(null);
 
   useEffect(() => {
