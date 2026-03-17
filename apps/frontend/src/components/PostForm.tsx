@@ -13,7 +13,7 @@ import {
   estimatedVBytes,
   MAX_CONTENT_BYTES,
 } from "../lib/ors";
-import { getFeeBumpSatPerVByte } from "../lib/fees";
+import { getFeeBumpSatPerVByte, getFeePriority } from "../lib/fees";
 import { signPayload } from "../lib/signing";
 import type { Profile } from "../types";
 import { UserIcon } from "lucide-react";
@@ -39,7 +39,7 @@ export function PostForm({
 }: PostFormProps) {
   const navigate = useNavigate();
   const [posting, setPosting] = useState(false);
-  const { feeRate, btcPriceUsd } = useNetworkStats();
+  const { feeRateHigh, feeRateMedium, feeMarkupPercent, btcPriceUsd } = useNetworkStats();
 
   const remaining =
     MAX_CONTENT_BYTES - new TextEncoder().encode(content).length;
@@ -129,14 +129,17 @@ export function PostForm({
           disabled={posting}
         />
         <div className="flex items-center justify-end gap-3">
-          {feeRate !== null &&
+          {(feeRateHigh !== null || feeRateMedium !== null) &&
             content.trim() &&
             (() => {
+              const priority = getFeePriority();
+              const baseRate = priority === "high" ? feeRateHigh : feeRateMedium;
+              if (baseRate === null) return null;
               const contentBytes = new TextEncoder().encode(content).length;
               const version = getProtocolVersion();
               const vBytes = estimatedVBytes(contentBytes, version);
-              const effectiveFeeRate = feeRate + getFeeBumpSatPerVByte();
-              const sats = Math.ceil(vBytes * effectiveFeeRate);
+              const effectiveFeeRate = baseRate + getFeeBumpSatPerVByte();
+              const sats = Math.ceil(vBytes * effectiveFeeRate * (1 + feeMarkupPercent / 100));
               const usd =
                 btcPriceUsd !== null
                   ? ((sats * btcPriceUsd) / 1e8).toFixed(2)

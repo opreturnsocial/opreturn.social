@@ -46,16 +46,28 @@ const FALLBACK_FEE_RATE_BTC_PER_KB = Number(
 const FORCE_FEE_RATE_SAT_PER_VBYTE = process.env.FORCE_FEE_RATE_SAT_PER_VBYTE
   ? Number(process.env.FORCE_FEE_RATE_SAT_PER_VBYTE)
   : null;
+const FORCE_FEE_RATE_HIGH_SAT_PER_VBYTE = process.env.FORCE_FEE_RATE_HIGH_SAT_PER_VBYTE
+  ? Number(process.env.FORCE_FEE_RATE_HIGH_SAT_PER_VBYTE)
+  : null;
+const FORCE_FEE_RATE_MEDIUM_SAT_PER_VBYTE = process.env.FORCE_FEE_RATE_MEDIUM_SAT_PER_VBYTE
+  ? Number(process.env.FORCE_FEE_RATE_MEDIUM_SAT_PER_VBYTE)
+  : null;
 
 function calcInvoiceSats(feeSats: number): number {
   return Math.ceil(feeSats * (1 + FEE_MARKUP_PERCENT / 100));
 }
 
-async function getFeeRate(): Promise<number> {
-  if (FORCE_FEE_RATE_SAT_PER_VBYTE !== null) {
-    return FORCE_FEE_RATE_SAT_PER_VBYTE / 1e5; // sat/vByte → BTC/kB
-  }
-  const { feerate } = await estimateSmartFee(1);
+async function getFeeRateForPriority(
+  priority: "high" | "medium",
+): Promise<number> {
+  const priorityOverride =
+    priority === "high"
+      ? FORCE_FEE_RATE_HIGH_SAT_PER_VBYTE
+      : FORCE_FEE_RATE_MEDIUM_SAT_PER_VBYTE;
+  if (priorityOverride !== null) return priorityOverride / 1e5; // sat/vByte → BTC/kB
+  if (FORCE_FEE_RATE_SAT_PER_VBYTE !== null) return FORCE_FEE_RATE_SAT_PER_VBYTE / 1e5;
+  const blocks = priority === "high" ? 1 : 3;
+  const { feerate } = await estimateSmartFee(blocks);
   return feerate > 0 ? feerate : FALLBACK_FEE_RATE_BTC_PER_KB;
 }
 
@@ -152,13 +164,14 @@ async function handleAction(
   action: string,
   protocolVersion: number,
   feeBumpBtcPerKb: number,
+  priority: "high" | "medium",
   buildV0: () => string,
   buildV1: () => string[],
   requestBody: object,
   res: express.Response,
 ): Promise<void> {
   try {
-    const feerate = await getFeeRate();
+    const feerate = await getFeeRateForPriority(priority);
     const effectiveFeeRate = feerate + feeBumpBtcPerKb;
     let estimatedFeeSats: number;
     let payloadHex: string;
@@ -234,9 +247,15 @@ export function createServer() {
 
   app.get("/fee-rate", async (_req, res) => {
     try {
-      const feeRateBtcPerKb = await getFeeRate();
-      const satPerVByte = (feeRateBtcPerKb * 1e8) / 1000;
-      res.json({ satPerVByte });
+      const [highRate, mediumRate] = await Promise.all([
+        getFeeRateForPriority("high"),
+        getFeeRateForPriority("medium"),
+      ]);
+      res.json({
+        high: { satPerVByte: (highRate * 1e8) / 1000 },
+        medium: { satPerVByte: (mediumRate * 1e8) / 1000 },
+        feeMarkupPercent: FEE_MARKUP_PERCENT,
+      });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
@@ -249,15 +268,19 @@ export function createServer() {
       sig,
       protocolVersion: pv,
       feeBumpSatPerVByte: fbRaw,
+      feePriority,
     } = req.body as {
       content?: string;
       pubkey?: string;
       sig?: string;
       protocolVersion?: number;
       feeBumpSatPerVByte?: number;
+      feePriority?: string;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
+    const priority: "high" | "medium" =
+      feePriority === "high" ? "high" : "medium";
 
     if (!content || !pubkey || !sig) {
       res.status(400).json({ error: "content, pubkey, and sig are required" });
@@ -268,6 +291,7 @@ export function createServer() {
       "post",
       protocolVersion,
       feeBumpBtcPerKb,
+      priority,
       () => buildPayload(content, pubkey, sig),
       () => buildPayloadV1(content, pubkey, sig),
       { content, pubkey, sig, protocolVersion },
@@ -283,6 +307,7 @@ export function createServer() {
       parentTxid,
       protocolVersion: pv,
       feeBumpSatPerVByte: fbRaw,
+      feePriority,
     } = req.body as {
       content?: string;
       pubkey?: string;
@@ -290,9 +315,12 @@ export function createServer() {
       parentTxid?: string;
       protocolVersion?: number;
       feeBumpSatPerVByte?: number;
+      feePriority?: string;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
+    const priority: "high" | "medium" =
+      feePriority === "high" ? "high" : "medium";
 
     if (!content || !pubkey || !sig || !parentTxid) {
       res
@@ -305,6 +333,7 @@ export function createServer() {
       "reply",
       protocolVersion,
       feeBumpBtcPerKb,
+      priority,
       () => buildPayloadReply(content, pubkey, sig, parentTxid),
       () => buildPayloadReplyV1(content, pubkey, sig, parentTxid),
       { content, pubkey, sig, parentTxid, protocolVersion },
@@ -319,15 +348,19 @@ export function createServer() {
       referencedTxid,
       protocolVersion: pv,
       feeBumpSatPerVByte: fbRaw,
+      feePriority,
     } = req.body as {
       pubkey?: string;
       sig?: string;
       referencedTxid?: string;
       protocolVersion?: number;
       feeBumpSatPerVByte?: number;
+      feePriority?: string;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
+    const priority: "high" | "medium" =
+      feePriority === "high" ? "high" : "medium";
 
     if (!pubkey || !sig || !referencedTxid) {
       res
@@ -340,6 +373,7 @@ export function createServer() {
       "repost",
       protocolVersion,
       feeBumpBtcPerKb,
+      priority,
       () => buildPayloadRepost(pubkey, sig, referencedTxid),
       () => buildPayloadRepostV1(pubkey, sig, referencedTxid),
       { pubkey, sig, referencedTxid, protocolVersion },
@@ -355,6 +389,7 @@ export function createServer() {
       referencedTxid,
       protocolVersion: pv,
       feeBumpSatPerVByte: fbRaw,
+      feePriority,
     } = req.body as {
       content?: string;
       pubkey?: string;
@@ -362,9 +397,12 @@ export function createServer() {
       referencedTxid?: string;
       protocolVersion?: number;
       feeBumpSatPerVByte?: number;
+      feePriority?: string;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
+    const priority: "high" | "medium" =
+      feePriority === "high" ? "high" : "medium";
 
     if (!content || !pubkey || !sig || !referencedTxid) {
       res
@@ -379,6 +417,7 @@ export function createServer() {
       "quote-repost",
       protocolVersion,
       feeBumpBtcPerKb,
+      priority,
       () => buildPayloadQuoteRepost(content, pubkey, sig, referencedTxid),
       () => buildPayloadQuoteRepostV1(content, pubkey, sig, referencedTxid),
       { content, pubkey, sig, referencedTxid, protocolVersion },
@@ -394,6 +433,7 @@ export function createServer() {
       sig,
       protocolVersion: pv,
       feeBumpSatPerVByte: fbRaw,
+      feePriority,
     } = req.body as {
       targetPubkey?: string;
       isFollow?: boolean;
@@ -401,9 +441,12 @@ export function createServer() {
       sig?: string;
       protocolVersion?: number;
       feeBumpSatPerVByte?: number;
+      feePriority?: string;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
+    const priority: "high" | "medium" =
+      feePriority === "high" ? "high" : "medium";
 
     if (!targetPubkey || typeof isFollow !== "boolean" || !pubkey || !sig) {
       res
@@ -418,6 +461,7 @@ export function createServer() {
       "follow",
       protocolVersion,
       feeBumpBtcPerKb,
+      priority,
       () => buildPayloadFollow(targetPubkey, isFollow, pubkey, sig),
       () => buildPayloadFollowV1(targetPubkey, isFollow, pubkey, sig),
       { targetPubkey, isFollow, pubkey, sig, protocolVersion },
@@ -433,6 +477,7 @@ export function createServer() {
       sig,
       protocolVersion: pv,
       feeBumpSatPerVByte: fbRaw,
+      feePriority,
     } = req.body as {
       propertyKind?: number;
       value?: string;
@@ -440,9 +485,12 @@ export function createServer() {
       sig?: string;
       protocolVersion?: number;
       feeBumpSatPerVByte?: number;
+      feePriority?: string;
     };
     const protocolVersion = pv ?? 1;
     const feeBumpBtcPerKb = parseFeeBump(fbRaw);
+    const priority: "high" | "medium" =
+      feePriority === "high" ? "high" : "medium";
 
     if (typeof propertyKind !== "number" || !value || !pubkey || !sig) {
       res
@@ -455,6 +503,7 @@ export function createServer() {
       "profile",
       protocolVersion,
       feeBumpBtcPerKb,
+      priority,
       () => buildPayloadProfile(propertyKind, value, pubkey, sig),
       () => buildPayloadProfileV1(propertyKind, value, pubkey, sig),
       { propertyKind, value, pubkey, sig, protocolVersion },

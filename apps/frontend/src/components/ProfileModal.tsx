@@ -31,7 +31,7 @@ import {
   getProtocolVersion,
   estimatedVBytes,
 } from "../lib/ors";
-import { getFeeBumpSatPerVByte } from "../lib/fees";
+import { getFeeBumpSatPerVByte, getFeePriority } from "../lib/fees";
 import { signPayload } from "../lib/signing";
 import type { Profile } from "../types";
 
@@ -63,15 +63,18 @@ export function ProfileModal({
     new Map(),
   );
   const [copiedField, setCopiedField] = useState<number | null>(null);
-  const { feeRate, btcPriceUsd } = useNetworkStats();
+  const { feeRateHigh, feeRateMedium, feeMarkupPercent, btcPriceUsd } = useNetworkStats();
 
   function fieldCost(value: string) {
-    if (feeRate === null || !value.trim()) return null;
+    if (!value.trim()) return null;
+    const priority = getFeePriority();
+    const baseRate = priority === "high" ? feeRateHigh : feeRateMedium;
+    if (baseRate === null) return null;
     const valueBytes = new TextEncoder().encode(value).length;
     // kindData = propertyKind(1) + valueBytes
     const vBytes = estimatedVBytes(1 + valueBytes, getProtocolVersion());
-    const effectiveFeeRate = feeRate + getFeeBumpSatPerVByte();
-    const sats = Math.ceil(vBytes * effectiveFeeRate);
+    const effectiveFeeRate = baseRate + getFeeBumpSatPerVByte();
+    const sats = Math.ceil(vBytes * effectiveFeeRate * (1 + feeMarkupPercent / 100));
     const usd =
       btcPriceUsd !== null ? ((sats * btcPriceUsd) / 1e8).toFixed(2) : null;
     return { sats, usd };

@@ -36,11 +36,11 @@ export function Header({
   onLogout,
   onTopUp,
 }: HeaderProps) {
-  const { feeRate, blockHeight, btcPriceUsd } = useNetworkStats();
+  const { feeRateMedium, blockHeight, btcPriceUsd } = useNetworkStats();
   const [statIndex, setStatIndex] = useState(0);
 
   const stats = [
-    feeRate !== null ? `${feeRate.toFixed(1)} sat/vB` : null,
+    feeRateMedium !== null ? `${feeRateMedium.toFixed(1)} sat/vB` : null,
     blockHeight !== null ? `${blockHeight}` : null,
     btcPriceUsd !== null ? `$${btcPriceUsd.toLocaleString()}` : null,
   ];

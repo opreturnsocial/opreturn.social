@@ -1,4 +1,4 @@
-import { getFeeBumpSatPerVByte } from "../lib/fees";
+import { getFeeBumpSatPerVByte, getFeePriority } from "../lib/fees";
 
 export const FACILITATOR_BASE_URL = import.meta.env.VITE_FACILITATOR_URL ?? "http://localhost:3002";
 const BASE_URL = FACILITATOR_BASE_URL;
@@ -29,7 +29,7 @@ export async function submitPost(
   sig: string,
   protocolVersion: number
 ): Promise<InvoiceResponse> {
-  return postAndGetInvoice("/post", { content, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte() });
+  return postAndGetInvoice("/post", { content, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
 export async function submitReply(
@@ -39,7 +39,7 @@ export async function submitReply(
   parentTxid: string,
   protocolVersion: number
 ): Promise<InvoiceResponse> {
-  return postAndGetInvoice("/reply", { content, pubkey, sig, parentTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte() });
+  return postAndGetInvoice("/reply", { content, pubkey, sig, parentTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
 export async function submitRepost(
@@ -48,7 +48,7 @@ export async function submitRepost(
   referencedTxid: string,
   protocolVersion: number
 ): Promise<InvoiceResponse> {
-  return postAndGetInvoice("/repost", { pubkey, sig, referencedTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte() });
+  return postAndGetInvoice("/repost", { pubkey, sig, referencedTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
 export async function submitQuoteRepost(
@@ -58,7 +58,7 @@ export async function submitQuoteRepost(
   referencedTxid: string,
   protocolVersion: number
 ): Promise<InvoiceResponse> {
-  return postAndGetInvoice("/quote-repost", { content, pubkey, sig, referencedTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte() });
+  return postAndGetInvoice("/quote-repost", { content, pubkey, sig, referencedTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
 export async function submitFollow(
@@ -68,7 +68,7 @@ export async function submitFollow(
   sig: string,
   protocolVersion: number
 ): Promise<InvoiceResponse> {
-  return postAndGetInvoice("/follow", { targetPubkey, isFollow, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte() });
+  return postAndGetInvoice("/follow", { targetPubkey, isFollow, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
 export async function submitProfileUpdate(
@@ -78,7 +78,7 @@ export async function submitProfileUpdate(
   sig: string,
   protocolVersion: number
 ): Promise<InvoiceResponse> {
-  return postAndGetInvoice("/profile", { propertyKind, value, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte() });
+  return postAndGetInvoice("/profile", { propertyKind, value, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
 export async function getStatus(paymentHash: string): Promise<{ broadcast: boolean; txid: string | null }> {

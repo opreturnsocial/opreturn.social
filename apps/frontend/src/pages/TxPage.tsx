@@ -24,7 +24,7 @@ import {
   KIND_QUOTE_REPOST,
   MAX_CONTENT_BYTES,
 } from "../lib/ors";
-import { getFeeBumpSatPerVByte } from "../lib/fees";
+import { getFeeBumpSatPerVByte, getFeePriority } from "../lib/fees";
 import type { Post, Profile, ActivityItem } from "../types";
 
 const POLL_INTERVAL_MS = 5000;
@@ -52,7 +52,7 @@ export function TxPage({
 }: TxPageProps) {
   const { txid } = useParams<{ txid: string }>();
   const navigate = useNavigate();
-  const { feeRate, btcPriceUsd } = useNetworkStats();
+  const { feeRateHigh, feeRateMedium, feeMarkupPercent, btcPriceUsd } = useNetworkStats();
   const [post, setPost] = useState<Post | null>(null);
   const [activity, setActivity] = useState<ActivityItem | null>(null);
   const [replies, setReplies] = useState<Post[]>([]);
@@ -226,16 +226,18 @@ export function TxPage({
                   {remaining} chars remaining
                 </span>
               )}
-              {feeRate !== null &&
-                replyText.trim() &&
+              {replyText.trim() &&
                 (() => {
+                  const priority = getFeePriority();
+                  const baseRate = priority === "high" ? feeRateHigh : feeRateMedium;
+                  if (baseRate === null) return null;
                   const contentBytes = new TextEncoder().encode(
                     replyText,
                   ).length;
                   const version = getProtocolVersion();
                   const vBytes = estimatedVBytes(32 + contentBytes, version);
-                  const effectiveFeeRate = feeRate + getFeeBumpSatPerVByte();
-                  const sats = Math.ceil(vBytes * effectiveFeeRate);
+                  const effectiveFeeRate = baseRate + getFeeBumpSatPerVByte();
+                  const sats = Math.ceil(vBytes * effectiveFeeRate * (1 + feeMarkupPercent / 100));
                   const usd =
                     btcPriceUsd !== null
                       ? ((sats * btcPriceUsd) / 1e8).toFixed(2)

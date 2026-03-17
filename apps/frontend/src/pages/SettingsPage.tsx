@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getProtocolVersion } from "../lib/ors";
-import { getFeeBumpSatPerVByte } from "../lib/fees";
+import { getFeeBumpSatPerVByte, getFeePriority, setFeePriority, type FeePriority } from "../lib/fees";
 
 function SecretRow({
   label,
@@ -69,8 +69,15 @@ export function SettingsPage() {
   const [protocolVersion, setProtocolVersionState] =
     useState(getProtocolVersion);
   const [feeBump, setFeeBumpState] = useState(getFeeBumpSatPerVByte);
+  const [feePriority, setFeePriorityState] = useState<FeePriority>(getFeePriority);
   const hasPrivkey = !!localStorage.getItem("ors_local_privkey");
   const hasSecrets = hasPrivkey || hasNwcUrl;
+
+  function handleFeePriorityChange(p: FeePriority) {
+    setFeePriority(p);
+    setFeePriorityState(p);
+    toast.success(p === "high" ? "Priority set to High (next block)" : "Priority set to Medium (~3 blocks)");
+  }
 
   function handleFeeBumpChange(v: number) {
     localStorage.setItem("ors_fee_bump_sat_per_vbyte", String(v));
@@ -187,8 +194,38 @@ export function SettingsPage() {
         </CardHeader>
         <CardContent className="pt-0 space-y-3">
           <p className="text-xs text-muted-foreground">
-            Add extra sat/vB on top of the estimated network fee rate to
-            prioritise confirmation speed.
+            Choose how quickly your transaction gets confirmed.
+          </p>
+          {(
+            [
+              { p: "medium" as FeePriority, label: "Medium", description: "~3 blocks - lower fee, default" },
+              { p: "high" as FeePriority, label: "High", description: "Next block - faster, higher fee" },
+            ] as { p: FeePriority; label: string; description: string }[]
+          ).map(({ p, label, description }) => (
+            <div
+              key={p}
+              className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${feePriority === p ? "border-primary bg-primary/5" : "hover:bg-accent/30"}`}
+              onClick={() => handleFeePriorityChange(p)}
+            >
+              <div
+                className={`mt-0.5 h-4 w-4 rounded-full border-2 flex-shrink-0 ${feePriority === p ? "border-primary bg-primary" : "border-muted-foreground"}`}
+              />
+              <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Fee Bump</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Add extra sat/vB on top of the selected priority fee rate.
           </p>
           <div className="flex gap-2">
             {[0, 1, 2, 5, 10].map((v) => (

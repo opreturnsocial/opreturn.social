@@ -2,14 +2,18 @@ import { useState, useEffect } from "react";
 import { FACILITATOR_BASE_URL } from "../api/facilitator";
 
 interface NetworkStats {
-  feeRate: number | null;
+  feeRateHigh: number | null;
+  feeRateMedium: number | null;
+  feeMarkupPercent: number;
   blockHeight: number | null;
   btcPriceUsd: number | null;
 }
 
 export function useNetworkStats(): NetworkStats {
   const [stats, setStats] = useState<NetworkStats>({
-    feeRate: null,
+    feeRateHigh: null,
+    feeRateMedium: null,
+    feeMarkupPercent: 10,
     blockHeight: null,
     btcPriceUsd: null,
   });
@@ -25,7 +29,9 @@ export function useNetworkStats(): NetworkStats {
       const height = await heightRes.json();
       const price = await priceRes.json();
       setStats({
-        feeRate: fees.satPerVByte ?? null,
+        feeRateHigh: fees.high?.satPerVByte ?? null,
+        feeRateMedium: fees.medium?.satPerVByte ?? null,
+        feeMarkupPercent: fees.feeMarkupPercent ?? 10,
         blockHeight: typeof height === "number" ? height : null,
         btcPriceUsd: price.USD ?? null,
       });

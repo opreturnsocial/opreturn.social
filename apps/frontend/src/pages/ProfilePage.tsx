@@ -52,7 +52,7 @@ import {
   KIND_REPOST,
   KIND_QUOTE_REPOST,
 } from "../lib/ors";
-import { getFeeBumpSatPerVByte } from "../lib/fees";
+import { getFeeBumpSatPerVByte, getFeePriority } from "../lib/fees";
 import { signPayload } from "../lib/signing";
 import type { Post, Profile, ActivityItem } from "../types";
 import { nip19 } from "nostr-tools";
@@ -108,7 +108,7 @@ export function ProfilePage({
   >(null);
   const [followLoading, setFollowLoading] = useState(false);
   const [confirmFollowOpen, setConfirmFollowOpen] = useState(false);
-  const { feeRate, btcPriceUsd } = useNetworkStats();
+  const { feeRateHigh, feeRateMedium, feeMarkupPercent, btcPriceUsd } = useNetworkStats();
   const [ogRank, setOgRank] = useState<number | null>(null);
   const [ogLeaderboard, setOgLeaderboard] = useState<
     { pubkey: string; rank: number; firstTimestamp: number }[]
@@ -514,13 +514,15 @@ export function ProfilePage({
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will be recorded on-chain.
-              {feeRate !== null &&
-                (() => {
-                  const effectiveFeeRate = feeRate + getFeeBumpSatPerVByte();
+              {(() => {
+                  const priority = getFeePriority();
+                  const baseRate = priority === "high" ? feeRateHigh : feeRateMedium;
+                  if (baseRate === null) return null;
+                  const effectiveFeeRate = baseRate + getFeeBumpSatPerVByte();
                   // kindData for FOLLOW = targetPubkey(32) + action(1) = 33 bytes
                   const sats = Math.ceil(
                     estimatedVBytes(33, getProtocolVersion()) *
-                      effectiveFeeRate,
+                      effectiveFeeRate * (1 + feeMarkupPercent / 100),
                   );
                   const usd =
                     btcPriceUsd !== null
