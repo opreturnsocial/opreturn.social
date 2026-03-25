@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Repeat2 } from "lucide-react";
 import { KIND_QUOTE_REPOST } from "../lib/ors";
 import { formatRelativeTime } from "../lib/utils";
+import { SponsorButton } from "./SponsorButton";
 import type { Post, Profile } from "../types";
 
 interface RepostCardProps {
@@ -19,6 +20,8 @@ export function RepostCard({
   repostProfile,
   originalPost,
   originalProfile,
+  loggedInPubkey,
+  onRefresh,
 }: RepostCardProps) {
   const navigate = useNavigate();
 
@@ -88,6 +91,17 @@ export function RepostCard({
             Original post not available
           </div>
         )}
+        {repost.network === "testnet4" && loggedInPubkey && (() => {
+          return (
+            <div className="mt-3 flex" onClick={(e) => e.stopPropagation()}>
+              <SponsorButton
+                testnetTxid={repost.txid}
+                loggedInPubkey={loggedInPubkey}
+                onSuccess={() => onRefresh?.()}
+              />
+            </div>
+          );
+        })()}
       </CardContent>
     </Card>
   );

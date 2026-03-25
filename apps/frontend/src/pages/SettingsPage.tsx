@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Copy, ExternalLink } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { Button } from "@/components/ui/button";
@@ -70,6 +72,9 @@ export function SettingsPage() {
     useState(getProtocolVersion);
   const [feeBump, setFeeBumpState] = useState(getFeeBumpSatPerVByte);
   const [feePriority, setFeePriorityState] = useState<FeePriority>(getFeePriority);
+  const [showExplainer, setShowExplainerState] = useState(
+    localStorage.getItem("ors_hide_posting_explainer") !== "true"
+  );
   const hasPrivkey = !!localStorage.getItem("ors_local_privkey");
   const hasSecrets = hasPrivkey || hasNwcUrl;
 
@@ -238,6 +243,32 @@ export function SettingsPage() {
                 {v === 0 ? "0" : `+${v}`}
               </Button>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Posting</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex items-center gap-3 py-2">
+            <Checkbox
+              id="show-explainer"
+              checked={showExplainer}
+              onCheckedChange={(v) => {
+                const show = v === true;
+                setShowExplainerState(show);
+                if (show) {
+                  localStorage.removeItem("ors_hide_posting_explainer");
+                } else {
+                  localStorage.setItem("ors_hide_posting_explainer", "true");
+                }
+              }}
+            />
+            <Label htmlFor="show-explainer" className="text-sm cursor-pointer">
+              Show paid vs free explainer before posting
+            </Label>
           </div>
         </CardContent>
       </Card>

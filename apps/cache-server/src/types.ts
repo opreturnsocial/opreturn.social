@@ -21,6 +21,7 @@ export interface StoredProfile {
 export interface StoredActivityItem {
   type: "follow" | "unfollow" | "profile_update";
   txid: string;
+  network?: string;
   pubkey: string;
   timestamp: number;
   blockHeight: number;
@@ -28,6 +29,7 @@ export interface StoredActivityItem {
   targetPubkey?: string;
   propertyKind?: number;
   value?: string;
+  sig?: string;
   replyCount: number;
   repostCount: number;
 }

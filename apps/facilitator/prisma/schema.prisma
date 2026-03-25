@@ -26,4 +26,6 @@ model PendingBroadcast {
   expiresAt         DateTime
   action            String   // "post" | "reply" | "repost" | "quote-repost" | "follow" | "profile"
   requestJson       String   // original request body as JSON (for cache notification after broadcast)
+  network           String   @default("mainnet")
+  pubkey            String   @default("")  // pubkey that submitted the action (for rate limiting)
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Clock, MessageCircle, MoreHorizontal, Repeat2Icon, Share2 } from "lucide-react";
+import { BoxIcon, Clock, MessageCircle, MoreHorizontal, Repeat2Icon, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { RepostModal } from "./RepostModal";
+import { SponsorButton } from "./SponsorButton";
 import { TxidDropdownItem } from "./TxidDropdownItem";
 import { formatRelativeTime } from "../lib/utils";
 import type { ActivityItem, Profile } from "../types";
@@ -125,6 +126,9 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
             </Link>
           </div>
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {item.network !== "testnet4" && (
+              <span title="On-chain bitcoin transaction"><BoxIcon className="w-3.5 h-3.5 text-orange-500" /></span>
+            )}
             {item.blockHeight === 0 && (
               <div title="Unconfirmed Transaction">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
@@ -141,7 +145,7 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
                   {item.blockHeight === 0 ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <TxidDropdownItem txid={item.txid} />
+                <TxidDropdownItem txid={item.txid} network={item.network} />
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -177,6 +181,13 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
           >
             <Share2 className="h-3.5 w-3.5" />
           </div>
+          {item.network === "testnet4" && loggedInPubkey && (
+            <SponsorButton
+              testnetTxid={item.txid}
+              loggedInPubkey={loggedInPubkey}
+              onSuccess={() => onRefresh?.()}
+            />
+          )}
         </div>
       </CardContent>
       <RepostModal

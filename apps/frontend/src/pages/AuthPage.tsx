@@ -8,6 +8,7 @@ import {
   Copy,
   Check,
   Wallet,
+  LockIcon,
 } from "lucide-react";
 import { LogoIcon } from "@/icons/LogoIcon";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,6 @@ type AuthStep =
   | "signup-choice"
   | "login-choice"
   | "quick-start-key"
-  | "quick-start-wallet"
   | "wallet-choice"
   | "wallet-fund"
   | "wallet-nwc-paste"
@@ -48,7 +48,7 @@ export function AuthPage({
     const pubkey = await getNostrExtPubkey();
     if (!pubkey) return;
     localStorage.setItem("ors_pubkey", pubkey);
-    setStep("wallet-choice");
+    onLoginComplete();
   }
 
   if (step === "landing") {
@@ -82,15 +82,7 @@ export function AuthPage({
     return (
       <QuickStartKeyView
         onBack={() => setStep("signup-choice")}
-        onContinue={() => setStep("quick-start-wallet")}
-      />
-    );
-  }
-  if (step === "quick-start-wallet") {
-    return (
-      <QuickStartWalletView
-        onBack={() => setStep("quick-start-key")}
-        onComplete={onQuickStartComplete}
+        onContinue={onLoginComplete}
       />
     );
   }
@@ -108,7 +100,7 @@ export function AuthPage({
     return (
       <EnterNsecView
         onBack={() => setStep("login-choice")}
-        onContinue={() => setStep("wallet-choice")}
+        onContinue={onLoginComplete}
       />
     );
   }
@@ -450,7 +442,7 @@ function QuickStartKeyView({
           </div>
 
           <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
-            <p className="font-semibold mb-1">Back up your key anytime</p>
+            <p className="font-semibold mb-1 flex items-center gap-1"><LockIcon className="h-3.5 w-3.5" />Back up your key anytime</p>
             <p>
               You can export your private key from Settings at any time. Without
               a backup, you cannot recover your account if you lose access to
@@ -459,7 +451,7 @@ function QuickStartKeyView({
           </div>
 
           <Button className="w-full h-11" onClick={onContinue}>
-            Continue - Set up wallet
+            Continue
           </Button>
         </div>
       </div>

@@ -24,7 +24,7 @@ export async function fetchReplies(txid: string): Promise<Post[]> {
   return data.posts;
 }
 
-export interface FollowRecord { pubkey: string; txid: string; blockHeight: number; status: string }
+export interface FollowRecord { pubkey: string; txid: string; blockHeight: number; status: string; network?: string }
 
 export async function fetchFollows(pubkey: string): Promise<{ pubkeys: string[]; pendingPubkeys: string[]; follows: FollowRecord[] }> {
   const res = await fetch(`${BASE_URL}/follows/${pubkey}`);

@@ -1,5 +1,6 @@
 export interface Post {
   txid: string;
+  network?: string;
   blockHeight: number;
   timestamp: number;
   content: string;
@@ -21,6 +22,7 @@ export interface Profile {
 export interface ActivityItem {
   type: "follow" | "unfollow" | "profile_update";
   txid: string;
+  network?: string;
   pubkey: string;
   timestamp: number;
   blockHeight: number;
@@ -38,6 +40,7 @@ declare global {
     nostr?: {
       getPublicKey(): Promise<string>;
       signSchnorr(msgHex: string): Promise<string>;
+      hashAndSignSchnorr?(msg: string): Promise<string>;
     };
   }
 }

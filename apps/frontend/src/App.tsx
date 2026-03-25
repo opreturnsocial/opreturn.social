@@ -211,19 +211,7 @@ export function App() {
                   loggedInPubkey ? () => setFundWalletOpen(true) : undefined
                 }
               />
-              {loggedInPubkey && !walletFunded && !(window as any).webln && (
-                <div className="bg-orange-50 border-b border-orange-200 px-4 py-2.5 flex items-center justify-center gap-3 text-sm text-orange-800">
-                  <span>
-                    Your wallet isn't funded yet - you won't be able to post.
-                  </span>
-                  <button
-                    className="font-semibold underline underline-offset-2 hover:text-orange-600"
-                    onClick={() => setFundWalletOpen(true)}
-                  >
-                    Fund wallet →
-                  </button>
-                </div>
-              )}
+
               <main className="container max-w-2xl mx-auto px-4 py-6">
                 <Routes>
                   <Route

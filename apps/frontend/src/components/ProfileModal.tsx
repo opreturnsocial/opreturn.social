@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { Clock, Check, Copy, ExternalLink, AlertTriangle } from "lucide-react";
 import { fetchActivity } from "../api/cache";
 import type { ActivityItem } from "../types";
-import { useNetworkStats } from "../hooks/useNetworkStats";
 import {
   Dialog,
   DialogContent,
@@ -23,15 +22,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { submitProfileUpdate } from "../api/facilitator";
-import { payAndBroadcast } from "../lib/payment";
+import { submitProfileUpdateFree } from "../api/facilitator";
+import { MakePermanentButton } from "./MakePermanentButton";
 import {
   buildProfileUpdateUnsignedPayload,
   buildV1SigningBody,
   getProtocolVersion,
-  estimatedVBytes,
 } from "../lib/ors";
-import { getFeeBumpSatPerVByte, getFeePriority } from "../lib/fees";
 import { signPayload } from "../lib/signing";
 import type { Profile } from "../types";
 
@@ -63,22 +60,6 @@ export function ProfileModal({
     new Map(),
   );
   const [copiedField, setCopiedField] = useState<number | null>(null);
-  const { feeRateHigh, feeRateMedium, feeMarkupPercent, btcPriceUsd } = useNetworkStats();
-
-  function fieldCost(value: string) {
-    if (!value.trim()) return null;
-    const priority = getFeePriority();
-    const baseRate = priority === "high" ? feeRateHigh : feeRateMedium;
-    if (baseRate === null) return null;
-    const valueBytes = new TextEncoder().encode(value).length;
-    // kindData = propertyKind(1) + valueBytes
-    const vBytes = estimatedVBytes(1 + valueBytes, getProtocolVersion());
-    const effectiveFeeRate = baseRate + getFeeBumpSatPerVByte();
-    const sats = Math.ceil(vBytes * effectiveFeeRate * (1 + feeMarkupPercent / 100));
-    const usd =
-      btcPriceUsd !== null ? ((sats * btcPriceUsd) / 1e8).toFixed(2) : null;
-    return { sats, usd };
-  }
 
   useEffect(() => {
     if (open) {
@@ -102,7 +83,7 @@ export function ProfileModal({
     }
   }, [open, profile, loggedInPubkey]);
 
-  function TxidRow({ propertyKind }: { propertyKind: number }) {
+  function TxidRow({ propertyKind, content }: { propertyKind: number; content: string }) {
     const item = fieldActivity.get(propertyKind);
     if (!item) return null;
     const shortTxid = `${item.txid.slice(0, 8)}...${item.txid.slice(-8)}`;
@@ -134,12 +115,23 @@ export function ProfileModal({
         </button>
         <button
           className="text-muted-foreground hover:text-foreground transition-colors"
-          onClick={() =>
-            window.open(`https://mempool.space/tx/${item.txid}`, "_blank")
-          }
+          onClick={() => {
+            const base = item.network === "testnet4" ? "https://mempool.space/testnet4" : "https://mempool.space";
+            window.open(`${base}/tx/${item.txid}`, "_blank");
+          }}
         >
           <ExternalLink className="h-3 w-3" />
         </button>
+        {item.network === "testnet4" && (
+          <MakePermanentButton
+            actionType="profile"
+            pubkey={loggedInPubkey}
+            propertyKind={propertyKind}
+            content={content}
+            disabled={!content.trim() || saving !== null}
+            onSuccess={onProfileUpdated}
+          />
+        )}
       </div>
     );
   }
@@ -162,17 +154,16 @@ export function ProfileModal({
       const signingPayload =
         version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, loggedInPubkey);
-      const { invoice, paymentHash } = await submitProfileUpdate(
+      const { txid } = await submitProfileUpdateFree(
         propertyKind,
         value.trim(),
         loggedInPubkey,
         sig,
         version,
       );
-      const { txid } = await payAndBroadcast(invoice, paymentHash);
 
       toast.success(`${fieldName} saved`, {
-        description: `TXID: ${txid}`,
+        description: `Testnet TXID: ${txid}`,
       });
       onProfileUpdated();
     } catch (err) {
@@ -205,25 +196,15 @@ export function ProfileModal({
                   onChange={(e) => setName(e.target.value)}
                   disabled={saving !== null}
                 />
-                {(() => {
-                  const c = fieldCost(name);
-                  return (
-                    c && (
-                      <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">
-                        ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
-                      </span>
-                    )
-                  );
-                })()}
                 <Button
                   size="sm"
                   onClick={() => saveField(PROPERTY_NAME, name, "Name")}
-                  disabled={saving !== null || !name.trim()}
+                  disabled={saving !== null || !name.trim() || name.trim() === (profile?.name ?? "").trim()}
                 >
                   {saving === "Name" ? "Saving…" : "Save"}
                 </Button>
               </div>
-              <TxidRow propertyKind={PROPERTY_NAME} />
+              <TxidRow propertyKind={PROPERTY_NAME} content={name} />
             </div>
 
             <div className="space-y-1">
@@ -245,16 +226,6 @@ export function ProfileModal({
                   onChange={(e) => setAvatarUrl(e.target.value)}
                   disabled={saving !== null}
                 />
-                {(() => {
-                  const c = fieldCost(avatarUrl);
-                  return (
-                    c && (
-                      <span className="text-xs text-muted-foreground font-mono self-center whitespace-nowrap">
-                        ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
-                      </span>
-                    )
-                  );
-                })()}
                 <Button
                   size="sm"
                   onClick={() => {
@@ -267,7 +238,7 @@ export function ProfileModal({
                       saveField(PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL");
                     }
                   }}
-                  disabled={saving !== null || !avatarUrl.trim()}
+                  disabled={saving !== null || !avatarUrl.trim() || avatarUrl.trim() === (profile?.avatarUrl ?? "").trim()}
                 >
                   {saving === "Avatar URL" ? "Saving…" : "Save"}
                 </Button>
@@ -292,7 +263,7 @@ export function ProfileModal({
                   </p>
                 </div>
               )}
-              <TxidRow propertyKind={PROPERTY_AVATAR_URL} />
+              <TxidRow propertyKind={PROPERTY_AVATAR_URL} content={avatarUrl} />
             </div>
 
             <div className="space-y-1">
@@ -306,25 +277,15 @@ export function ProfileModal({
                 disabled={saving !== null}
               />
               <div className="flex items-center gap-2">
-                {(() => {
-                  const c = fieldCost(bio);
-                  return (
-                    c && (
-                      <span className="text-xs text-muted-foreground font-mono">
-                        ~{c.sats} sats{c.usd !== null && ` ($${c.usd})`}
-                      </span>
-                    )
-                  );
-                })()}
                 <Button
                   size="sm"
                   onClick={() => saveField(PROPERTY_BIO, bio, "Bio")}
-                  disabled={saving !== null || !bio.trim()}
+                  disabled={saving !== null || !bio.trim() || bio.trim() === (profile?.bio ?? "").trim()}
                 >
                   {saving === "Bio" ? "Saving…" : "Save Bio"}
                 </Button>
               </div>
-              <TxidRow propertyKind={PROPERTY_BIO} />
+              <TxidRow propertyKind={PROPERTY_BIO} content={bio} />
             </div>
           </div>
         </DialogContent>

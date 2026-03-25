@@ -10,6 +10,10 @@ export interface InvoiceResponse {
   invoiceSats: number;
 }
 
+export interface FreePostResponse {
+  txid: string;
+}
+
 async function postAndGetInvoice(endpoint: string, body: object): Promise<InvoiceResponse> {
   const res = await fetch(`${BASE_URL}${endpoint}`, {
     method: "POST",
@@ -23,62 +27,47 @@ async function postAndGetInvoice(endpoint: string, body: object): Promise<Invoic
   return res.json();
 }
 
-export async function submitPost(
-  content: string,
-  pubkey: string,
-  sig: string,
-  protocolVersion: number
-): Promise<InvoiceResponse> {
+async function postFree(endpoint: string, body: object): Promise<FreePostResponse> {
+  const res = await fetch(`${BASE_URL}/testnet4${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = (await res.json()) as { error: string };
+    throw new Error(err.error ?? `Facilitator error: ${res.status}`);
+  }
+  return res.json();
+}
+
+// --- Mainnet (paid) ---
+
+export async function submitPost(content: string, pubkey: string, sig: string, protocolVersion: number): Promise<InvoiceResponse> {
   return postAndGetInvoice("/post", { content, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
-export async function submitReply(
-  content: string,
-  pubkey: string,
-  sig: string,
-  parentTxid: string,
-  protocolVersion: number
-): Promise<InvoiceResponse> {
+export async function submitReply(content: string, pubkey: string, sig: string, parentTxid: string, protocolVersion: number): Promise<InvoiceResponse> {
   return postAndGetInvoice("/reply", { content, pubkey, sig, parentTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
-export async function submitRepost(
-  pubkey: string,
-  sig: string,
-  referencedTxid: string,
-  protocolVersion: number
-): Promise<InvoiceResponse> {
+export async function submitRepost(pubkey: string, sig: string, referencedTxid: string, protocolVersion: number): Promise<InvoiceResponse> {
   return postAndGetInvoice("/repost", { pubkey, sig, referencedTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
-export async function submitQuoteRepost(
-  content: string,
-  pubkey: string,
-  sig: string,
-  referencedTxid: string,
-  protocolVersion: number
-): Promise<InvoiceResponse> {
+export async function submitQuoteRepost(content: string, pubkey: string, sig: string, referencedTxid: string, protocolVersion: number): Promise<InvoiceResponse> {
   return postAndGetInvoice("/quote-repost", { content, pubkey, sig, referencedTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
-export async function submitFollow(
-  targetPubkey: string,
-  isFollow: boolean,
-  pubkey: string,
-  sig: string,
-  protocolVersion: number
-): Promise<InvoiceResponse> {
+export async function submitFollow(targetPubkey: string, isFollow: boolean, pubkey: string, sig: string, protocolVersion: number): Promise<InvoiceResponse> {
   return postAndGetInvoice("/follow", { targetPubkey, isFollow, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
-export async function submitProfileUpdate(
-  propertyKind: number,
-  value: string,
-  pubkey: string,
-  sig: string,
-  protocolVersion: number
-): Promise<InvoiceResponse> {
+export async function submitProfileUpdate(propertyKind: number, value: string, pubkey: string, sig: string, protocolVersion: number): Promise<InvoiceResponse> {
   return postAndGetInvoice("/profile", { propertyKind, value, pubkey, sig, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
+}
+
+export async function sponsorTransaction(testnetTxid: string, protocolVersion: number): Promise<InvoiceResponse> {
+  return postAndGetInvoice("/sponsor", { testnetTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
 export async function getStatus(paymentHash: string): Promise<{ broadcast: boolean; txid: string | null }> {
@@ -88,4 +77,30 @@ export async function getStatus(paymentHash: string): Promise<{ broadcast: boole
     throw new Error(err.error ?? `Facilitator error: ${res.status}`);
   }
   return res.json();
+}
+
+// --- Testnet4 (free) ---
+
+export async function submitPostFree(content: string, pubkey: string, sig: string, protocolVersion: number): Promise<FreePostResponse> {
+  return postFree("/post", { content, pubkey, sig, protocolVersion });
+}
+
+export async function submitReplyFree(content: string, pubkey: string, sig: string, parentTxid: string, protocolVersion: number): Promise<FreePostResponse> {
+  return postFree("/reply", { content, pubkey, sig, parentTxid, protocolVersion });
+}
+
+export async function submitRepostFree(pubkey: string, sig: string, referencedTxid: string, protocolVersion: number): Promise<FreePostResponse> {
+  return postFree("/repost", { pubkey, sig, referencedTxid, protocolVersion });
+}
+
+export async function submitQuoteRepostFree(content: string, pubkey: string, sig: string, referencedTxid: string, protocolVersion: number): Promise<FreePostResponse> {
+  return postFree("/quote-repost", { content, pubkey, sig, referencedTxid, protocolVersion });
+}
+
+export async function submitFollowFree(targetPubkey: string, isFollow: boolean, pubkey: string, sig: string, protocolVersion: number): Promise<FreePostResponse> {
+  return postFree("/follow", { targetPubkey, isFollow, pubkey, sig, protocolVersion });
+}
+
+export async function submitProfileUpdateFree(propertyKind: number, value: string, pubkey: string, sig: string, protocolVersion: number): Promise<FreePostResponse> {
+  return postFree("/profile", { propertyKind, value, pubkey, sig, protocolVersion });
 }

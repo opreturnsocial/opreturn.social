@@ -13,7 +13,9 @@ export async function signPayload(
       privkeyHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)),
     );
     const sig = schnorr.sign(msgHash, privkeyBytes);
-    return Array.from(sig).map((b) => b.toString(16).padStart(2, "0")).join("");
+    return Array.from(sig)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
   }
 
   if (!window.nostr) throw new Error("Alby extension not found.");
@@ -27,6 +29,8 @@ export async function signPayload(
     }
   }
 
-  const msgHex = Array.from(msgHash).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const msgHex = Array.from(msgHash)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
   return window.nostr.signSchnorr(msgHex);
 }

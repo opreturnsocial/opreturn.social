@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { NWCClient } from "@getalby/sdk/nwc";
 import { getFiatValue } from "@getalby/lightning-tools/fiat";
 
@@ -290,31 +289,17 @@ export function WalletFundingView({
         </div>
       </div>
 
-      <Card className="bg-muted/50">
-        <CardContent className="p-3">
-          <p className="text-xs mb-2">
-            Or copy the following{" "}
-            <span className="font-semibold">bitcoin lightning invoice</span>
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="text-xs font-mono break-all text-muted-foreground">
-              {invoice}
-            </code>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              onClick={copyInvoice}
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-green-500" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <button
+        onClick={copyInvoice}
+        className="flex items-center justify-center gap-2 w-full h-11 rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+      >
+        {copied ? (
+          <Check className="h-4 w-4 text-green-500" />
+        ) : (
+          <Copy className="h-4 w-4" />
+        )}
+        {copied ? "Copied!" : "Copy invoice"}
+      </button>
 
       <a
         href={ffioUrl}

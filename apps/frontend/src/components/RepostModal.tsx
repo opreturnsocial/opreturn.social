@@ -9,8 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { submitRepost, submitQuoteRepost } from "../api/facilitator";
-import { payAndBroadcast } from "../lib/payment";
+import { submitRepostFree, submitQuoteRepostFree } from "../api/facilitator";
 import {
   buildRepostUnsignedPayload,
   buildQuoteRepostUnsignedPayload,
@@ -66,25 +65,15 @@ export function RepostModal({
         version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, pubkey);
 
-      let invoiceRes;
+      let res;
       if (isQuote) {
-        invoiceRes = await submitQuoteRepost(
-          quote.trim(),
-          pubkey,
-          sig,
-          txid,
-          version,
-        );
+        res = await submitQuoteRepostFree(quote.trim(), pubkey, sig, txid, version);
       } else {
-        invoiceRes = await submitRepost(pubkey, sig, txid, version);
+        res = await submitRepostFree(pubkey, sig, txid, version);
       }
-      const { txid: broadcastTxid } = await payAndBroadcast(
-        invoiceRes.invoice,
-        invoiceRes.paymentHash,
-      );
 
       toast.success(`${isQuote ? "Quote reposted" : "Reposted"}!`, {
-        description: `TXID: ${broadcastTxid}`,
+        description: `Testnet TXID: ${res.txid}`,
       });
       setQuote("");
       onOpenChange(false);

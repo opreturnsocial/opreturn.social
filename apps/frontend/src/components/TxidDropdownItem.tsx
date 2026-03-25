@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { shortenTxid } from "@/lib/utils";
 
 interface TxidDropdownItemProps {
   txid: string;
+  network?: string;
+  children?: ReactNode;
 }
 
-export function TxidDropdownItem({ txid }: TxidDropdownItemProps) {
+export function TxidDropdownItem({ txid, network, children }: TxidDropdownItemProps) {
   const shortTxid = shortenTxid(txid);
   const [copied, setCopied] = useState(false);
 
@@ -20,7 +22,8 @@ export function TxidDropdownItem({ txid }: TxidDropdownItemProps) {
 
   function handleOpen(e: React.MouseEvent) {
     e.stopPropagation();
-    window.open(`https://mempool.space/tx/${txid}`, "_blank");
+    const base = network === "testnet4" ? "https://mempool.space/testnet4" : "https://mempool.space";
+    window.open(`${base}/tx/${txid}`, "_blank");
   }
 
   return (
@@ -34,6 +37,7 @@ export function TxidDropdownItem({ txid }: TxidDropdownItemProps) {
         <button className="text-muted-foreground hover:text-foreground" onClick={handleOpen}>
           <ExternalLink className="h-3.5 w-3.5" />
         </button>
+        {children}
       </div>
     </DropdownMenuItem>
   );

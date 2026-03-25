@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  BoxIcon,
   Clock,
   CornerUpLeft,
   MessageCircle,
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { RepostModal } from "./RepostModal";
+import { SponsorButton } from "./SponsorButton";
 import { TxidDropdownItem } from "./TxidDropdownItem";
 import { formatRelativeTime } from "../lib/utils";
 import { KIND_TEXT_NOTE, KIND_TEXT_REPLY, KIND_QUOTE_REPOST } from "../lib/ors";
@@ -191,6 +193,9 @@ export function PostCard({
             className="flex items-center gap-1"
             onClick={(e) => e.stopPropagation()}
           >
+            {post.network !== "testnet4" && (
+              <span title="On-chain bitcoin transaction"><BoxIcon className="w-3.5 h-3.5 text-orange-500" /></span>
+            )}
             {post.blockHeight === 0 && (
               <div title="Unconfirmed Transaction">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
@@ -213,7 +218,7 @@ export function PostCard({
                     : `Confirmed at block ${post.blockHeight}`}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <TxidDropdownItem txid={post.txid} />
+                <TxidDropdownItem txid={post.txid} network={post.network} />
                 {noteOgRank !== undefined && post.kind === KIND_TEXT_NOTE && (
                   <>
                     <DropdownMenuSeparator />
@@ -300,6 +305,13 @@ export function PostCard({
           >
             <Share2 className="h-3.5 w-3.5" />
           </div>
+          {post.network === "testnet4" && loggedInPubkey && (
+            <SponsorButton
+              testnetTxid={post.txid}
+              loggedInPubkey={loggedInPubkey}
+              onSuccess={() => onRefresh?.()}
+            />
+          )}
         </div>
       </CardContent>
       <RepostModal

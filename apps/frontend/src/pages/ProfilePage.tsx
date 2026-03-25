@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { Clock, MoreHorizontal } from "lucide-react";
+import { BoxIcon, Clock, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +20,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useNetworkStats } from "../hooks/useNetworkStats";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,18 +40,16 @@ import {
   fetchActivity,
 } from "../api/cache";
 import type { FollowRecord } from "../api/cache";
-import { submitFollow } from "../api/facilitator";
-import { payAndBroadcast } from "../lib/payment";
+import { submitFollowFree } from "../api/facilitator";
+import { MakePermanentButton } from "../components/MakePermanentButton";
 import {
   buildFollowUnsignedPayload,
   buildV1SigningBody,
   getProtocolVersion,
-  estimatedVBytes,
   KIND_TEXT_REPLY,
   KIND_REPOST,
   KIND_QUOTE_REPOST,
 } from "../lib/ors";
-import { getFeeBumpSatPerVByte, getFeePriority } from "../lib/fees";
 import { signPayload } from "../lib/signing";
 import type { Post, Profile, ActivityItem } from "../types";
 import { nip19 } from "nostr-tools";
@@ -108,12 +105,18 @@ export function ProfilePage({
   >(null);
   const [followLoading, setFollowLoading] = useState(false);
   const [confirmFollowOpen, setConfirmFollowOpen] = useState(false);
-  const { feeRateHigh, feeRateMedium, feeMarkupPercent, btcPriceUsd } = useNetworkStats();
   const [ogRank, setOgRank] = useState<number | null>(null);
   const [ogLeaderboard, setOgLeaderboard] = useState<
     { pubkey: string; rank: number; firstTimestamp: number }[]
   >([]);
   const [ogModalOpen, setOgModalOpen] = useState(false);
+  const [localIsFollowing, setLocalIsFollowing] = useState<boolean | null>(
+    null,
+  );
+
+  useEffect(() => {
+    setLocalIsFollowing(null);
+  }, [pubkey]);
 
   const profile = pubkey ? profiles[pubkey] : undefined;
   const displayName =
@@ -170,14 +173,14 @@ export function ProfilePage({
       const signingPayload =
         version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, loggedInPubkey);
-      const { invoice, paymentHash } = await submitFollow(
+      const { txid } = await submitFollowFree(
         pubkey,
         newIsFollow,
         loggedInPubkey,
         sig,
         version,
       );
-      const { txid } = await payAndBroadcast(invoice, paymentHash);
+      setLocalIsFollowing(newIsFollow);
       onFollowChange?.();
       // Refresh local follower count
       const followers = await fetchFollowers(pubkey);
@@ -185,7 +188,7 @@ export function ProfilePage({
       setPendingFollowerPubkeys(new Set(followers.pendingPubkeys));
       setFollowerInfo(new Map(followers.follows.map((f) => [f.pubkey, f])));
       toast.success(newIsFollow ? "Followed!" : "Unfollowed!", {
-        description: `TXID: ${txid}`,
+        description: `Testnet TXID: ${txid}`,
       });
     } catch (err) {
       toast.error((err as Error).message ?? "Failed");
@@ -198,7 +201,9 @@ export function ProfilePage({
     setConfirmFollowOpen(true);
   }
 
-  const isFollowing = pubkey ? (followedPubkeys?.has(pubkey) ?? false) : false;
+  const isFollowing =
+    localIsFollowing ??
+    (pubkey ? (followedPubkeys?.has(pubkey) ?? false) : false);
   const canFollow = loggedInPubkey && pubkey && loggedInPubkey !== pubkey;
 
   const modalPubkeys =
@@ -241,8 +246,22 @@ export function ProfilePage({
                 >
                   {followLoading ? "..." : isFollowing ? "Following" : "Follow"}
                 </Button>
+                {isFollowing && (
+                  <MakePermanentButton
+                    actionType="follow"
+                    pubkey={loggedInPubkey!}
+                    followPubkey={pubkey!}
+                    followIsFollow={true}
+                    onSuccess={() => {
+                      onFollowChange?.();
+                    }}
+                  />
+                )}
                 {isFollowing && pendingFollowPubkeys?.has(pubkey!) && (
-                  <span title="Unconfirmed Transaction" className="cursor-help">
+                  <span
+                    title="Unconfirmed Transaction"
+                    className="cursor-pointer"
+                  >
                     <Clock className="h-4 w-4 text-muted-foreground" />
                   </span>
                 )}
@@ -286,11 +305,16 @@ export function ProfilePage({
           </div>
         </div>
         {(() => {
-          const FIELD_NAMES: Record<number, string> = { 0: "Name", 1: "Avatar URL", 2: "Bio" };
+          const FIELD_NAMES: Record<number, string> = {
+            0: "Name",
+            1: "Avatar URL",
+            2: "Bio",
+          };
           const profileFieldTxids = new Map<number, ActivityItem>();
           for (const item of profileActivity) {
             if (item.type === "profile_update" && item.propertyKind !== undefined) {
-              if (!profileFieldTxids.has(item.propertyKind)) {
+              const existing = profileFieldTxids.get(item.propertyKind);
+              if (!existing || (item.network === "mainnet" && existing.network !== "mainnet")) {
                 profileFieldTxids.set(item.propertyKind, item);
               }
             }
@@ -299,22 +323,47 @@ export function ProfilePage({
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-muted-foreground"
+                >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {Array.from(profileFieldTxids.entries()).map(([kind, item]) => {
+                  const fieldContent = [profile?.name, profile?.avatarUrl, profile?.bio][kind] ?? "";
                   return (
                     <div key={kind}>
                       <DropdownMenuLabel className="text-xs font-normal">
-                        <span className="font-medium">{FIELD_NAMES[kind] ?? `Field ${kind}`}</span>
-                        <span className="text-muted-foreground ml-1">
-                          - {item.blockHeight === 0 ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}
+                        <span className="flex items-center gap-1">
+                          <span className="font-medium">
+                            {FIELD_NAMES[kind] ?? `Field ${kind}`}
+                          </span>
+                          {item.network !== "testnet4" && (
+                            <span title="On-chain bitcoin transaction"><BoxIcon className="w-3 h-3 text-orange-500 shrink-0" /></span>
+                          )}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {item.blockHeight === 0
+                            ? "In Mempool"
+                            : `Confirmed at block ${item.blockHeight}`}
                         </span>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <TxidDropdownItem txid={item.txid} />
+                      <TxidDropdownItem txid={item.txid} network={item.network}>
+                        {item.network === "testnet4" && loggedInPubkey === pubkey && (
+                          <MakePermanentButton
+                            actionType="profile"
+                            pubkey={loggedInPubkey}
+                            propertyKind={kind}
+                            content={fieldContent}
+                            disabled={!fieldContent}
+                            onSuccess={load}
+                          />
+                        )}
+                      </TxidDropdownItem>
                     </div>
                   );
                 })}
@@ -446,6 +495,7 @@ export function ProfilePage({
                   }
                   replyCount={replyCountMap[post.txid] ?? 0}
                   repostCount={repostCountMap[post.txid] ?? 0}
+                  loggedInPubkey={loggedInPubkey}
                   noteOgLeaderboard={noteOgLeaderboard}
                   allProfiles={profiles}
                 />
@@ -513,23 +563,7 @@ export function ProfilePage({
               {isFollowing ? "Unfollow" : "Follow"} {displayName}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will be recorded on-chain.
-              {(() => {
-                  const priority = getFeePriority();
-                  const baseRate = priority === "high" ? feeRateHigh : feeRateMedium;
-                  if (baseRate === null) return null;
-                  const effectiveFeeRate = baseRate + getFeeBumpSatPerVByte();
-                  // kindData for FOLLOW = targetPubkey(32) + action(1) = 33 bytes
-                  const sats = Math.ceil(
-                    estimatedVBytes(33, getProtocolVersion()) *
-                      effectiveFeeRate * (1 + feeMarkupPercent / 100),
-                  );
-                  const usd =
-                    btcPriceUsd !== null
-                      ? ((sats * btcPriceUsd) / 1e8).toFixed(2)
-                      : null;
-                  return ` Estimated cost: ~${sats} sats${usd !== null ? ` ($${usd})` : ""}.`;
-                })()}
+              This will be posted to testnet. You can make it permanent later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -592,10 +626,13 @@ export function ProfilePage({
                     {isPending && (
                       <span
                         title="Unconfirmed Transaction"
-                        className="cursor-help shrink-0"
+                        className="cursor-pointer shrink-0"
                       >
                         <Clock className="h-3 w-3 text-muted-foreground" />
                       </span>
+                    )}
+                    {info && !isPending && info.network !== "testnet4" && (
+                      <span title="On-chain bitcoin transaction"><BoxIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" /></span>
                     )}
                     {info && (
                       <DropdownMenu>
@@ -615,9 +652,19 @@ export function ProfilePage({
                               : `Confirmed at block ${info.blockHeight}`}
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <TxidDropdownItem
-                            txid={info.txid}
-                          />
+                          <TxidDropdownItem txid={info.txid} network={info.network}>
+                            {info.network === "testnet4" &&
+                              ((followListModal === "following" && loggedInPubkey === pubkey) ||
+                                (followListModal === "followers" && pk === loggedInPubkey)) && (
+                              <MakePermanentButton
+                                actionType="follow"
+                                pubkey={loggedInPubkey!}
+                                followPubkey={followListModal === "following" ? pk : pubkey!}
+                                followIsFollow={true}
+                                onSuccess={load}
+                              />
+                            )}
+                          </TxidDropdownItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}

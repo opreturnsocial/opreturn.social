@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { sha256 } from "@noble/hashes/sha256";
 import { schnorr } from "@noble/curves/secp256k1";
+
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,21 +11,17 @@ import { Separator } from "@/components/ui/separator";
 import { PostCard } from "../components/PostCard";
 import { ActivityCard } from "../components/ActivityCard";
 import { fetchPost, fetchActivityItem, fetchReplies } from "../api/cache";
-import { submitReply } from "../api/facilitator";
-import { payAndBroadcast } from "../lib/payment";
-import { useNetworkStats } from "../hooks/useNetworkStats";
+import { submitReplyFree } from "../api/facilitator";
 import { signPayload } from "../lib/signing";
 import {
   buildReplyUnsignedPayload,
   buildV1SigningBody,
   getProtocolVersion,
-  estimatedVBytes,
   KIND_TEXT_REPLY,
   KIND_REPOST,
   KIND_QUOTE_REPOST,
   MAX_CONTENT_BYTES,
 } from "../lib/ors";
-import { getFeeBumpSatPerVByte, getFeePriority } from "../lib/fees";
 import type { Post, Profile, ActivityItem } from "../types";
 
 const POLL_INTERVAL_MS = 5000;
@@ -52,7 +49,6 @@ export function TxPage({
 }: TxPageProps) {
   const { txid } = useParams<{ txid: string }>();
   const navigate = useNavigate();
-  const { feeRateHigh, feeRateMedium, feeMarkupPercent, btcPriceUsd } = useNetworkStats();
   const [post, setPost] = useState<Post | null>(null);
   const [activity, setActivity] = useState<ActivityItem | null>(null);
   const [replies, setReplies] = useState<Post[]>([]);
@@ -105,17 +101,16 @@ export function TxPage({
         return;
       }
 
-      const { invoice, paymentHash } = await submitReply(
+      const { txid: replyTxid } = await submitReplyFree(
         replyText.trim(),
         loggedInPubkey,
         sig,
         txid,
         version,
       );
-      await payAndBroadcast(invoice, paymentHash);
       setReplyText("");
-      toast.success("Reply submitted!", {
-        description: `TXID: ${txid}`,
+      toast.success("Reply posted!", {
+        description: `Testnet TXID: ${replyTxid}`,
       });
       await load();
     } catch (err) {
@@ -226,28 +221,6 @@ export function TxPage({
                   {remaining} chars remaining
                 </span>
               )}
-              {replyText.trim() &&
-                (() => {
-                  const priority = getFeePriority();
-                  const baseRate = priority === "high" ? feeRateHigh : feeRateMedium;
-                  if (baseRate === null) return null;
-                  const contentBytes = new TextEncoder().encode(
-                    replyText,
-                  ).length;
-                  const version = getProtocolVersion();
-                  const vBytes = estimatedVBytes(32 + contentBytes, version);
-                  const effectiveFeeRate = baseRate + getFeeBumpSatPerVByte();
-                  const sats = Math.ceil(vBytes * effectiveFeeRate * (1 + feeMarkupPercent / 100));
-                  const usd =
-                    btcPriceUsd !== null
-                      ? ((sats * btcPriceUsd) / 1e8).toFixed(2)
-                      : null;
-                  return (
-                    <span className="text-xs text-muted-foreground font-mono">
-                      ~{sats} sats{usd !== null && ` ($${usd})`}
-                    </span>
-                  );
-                })()}
               <Button
                 size="sm"
                 onClick={handleReply}

@@ -9,7 +9,8 @@ generator client {
 }
 
 model Post {
-  txid        String  @id
+  txid        String
+  network     String  @default("mainnet")
   blockHeight Int
   timestamp   Int
   content     String
@@ -18,54 +19,71 @@ model Post {
   sig         String
   parentTxid  String?
   status      String  @default("confirmed")
+
+  @@id([txid, network])
 }
 
 model ScannerState {
-  id        Int @id @default(1)
-  lastBlock Int @default(0)
+  network   String  @id
+  lastBlock Int     @default(0)
 }
 
 model Profile {
-  pubkey    String  @id
+  pubkey    String
+  network   String  @default("mainnet")
   name      String?
   bio       String?
   avatarUrl String?
   status    String  @default("confirmed")
+
+  @@id([pubkey, network])
 }
 
 model Follow {
   followerPubkey String
   followeePubkey String
+  network        String  @default("mainnet")
   txid           String
   timestamp      Int
   blockHeight    Int
   isFollow       Boolean
   status         String  @default("confirmed")
+  sig            String  @default("")
 
-  @@id([followerPubkey, followeePubkey])
+  @@id([followerPubkey, followeePubkey, network])
 }
 
 model ProfileUpdateEvent {
-  txid         String @id
+  txid         String
+  network      String  @default("mainnet")
   pubkey       String
   propertyKind Int
   value        String
   blockHeight  Int
   timestamp    Int
   status       String @default("confirmed")
+  sig          String @default("")
+
+  @@id([txid, network])
 }
 
 model ScannedBlock {
-  height Int    @id
-  hash   String
+  height  Int
+  network String  @default("mainnet")
+  hash    String
+
+  @@id([height, network])
 }
 
 model PendingChunk {
   id          Int     @id @default(autoincrement())
-  txid        String  @unique
+  txid        String
+  network     String  @default("mainnet")
   chunkNum    Int
   totalChunks Int?    // only set for chunkNum == 0
   bodySlice   String  // hex-encoded body slice
   blockHeight Int
   timestamp   Int     // block timestamp (unix)
+
+  @@unique([txid, network])
 }
