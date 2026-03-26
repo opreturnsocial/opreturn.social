@@ -1,4 +1,4 @@
-import type { Post, Profile, ActivityItem } from "../types";
+import type { Post, Profile, ActivityItem, FeedItem } from "../types";
 
 const BASE_URL = import.meta.env.VITE_CACHE_SERVER_URL ?? "http://localhost:3001";
 
@@ -60,6 +60,19 @@ export async function fetchActivity(limit = 50, offset = 0, pubkey?: string): Pr
   if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
   const data = (await res.json()) as { items: ActivityItem[] };
   return data.items;
+}
+
+export async function fetchFeed(
+  limit = 20,
+  offset = 0,
+  filter?: { pubkey?: string; viewer?: string },
+): Promise<FeedItem[]> {
+  let url = `${BASE_URL}/feed?limit=${limit}&offset=${offset}`;
+  if (filter?.pubkey) url += `&pubkey=${encodeURIComponent(filter.pubkey)}`;
+  if (filter?.viewer) url += `&viewer=${encodeURIComponent(filter.viewer)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
+  return (await res.json() as { items: FeedItem[] }).items;
 }
 
 export async function fetchOgLeaderboard(): Promise<{ pubkey: string; rank: number; firstTimestamp: number }[]> {

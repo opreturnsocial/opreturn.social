@@ -3,23 +3,19 @@ import { PostCard } from "./PostCard";
 import { RepostCard } from "./RepostCard";
 import { ActivityCard } from "./ActivityCard";
 import {
-  KIND_TEXT_REPLY,
   KIND_REPOST,
   KIND_QUOTE_REPOST,
-  KIND_TEXT_NOTE,
 } from "../lib/ors";
-import type { Post, Profile, ActivityItem } from "../types";
+import type { Post, Profile, ActivityItem, FeedItem } from "../types";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 
 interface FeedProps {
-  posts: Post[];
+  items: FeedItem[];
   loading: boolean;
   error: string | null;
   profiles: Record<string, Profile>;
   loggedInPubkey?: string | null;
   onRefresh?: () => void;
-  tab?: "global" | "following";
-  followedPubkeys?: Set<string>;
-  activityItems?: ActivityItem[];
   noteOgLeaderboard?: {
     txid: string;
     rank: number;
@@ -27,6 +23,9 @@ interface FeedProps {
     pubkey: string;
     content: string;
   }[];
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
+  hasMore?: boolean;
 }
 
 function PostSkeleton() {
@@ -43,155 +42,118 @@ function PostSkeleton() {
 }
 
 export function Feed({
-  posts,
+  items,
   loading,
   error,
   profiles,
   loggedInPubkey,
   onRefresh,
-  tab,
-  followedPubkeys,
-  activityItems,
   noteOgLeaderboard,
+  onLoadMore,
+  loadingMore,
+  hasMore,
 }: FeedProps) {
+  // Sentinel must always be in the DOM so the observer can attach on mount
+  const sentinelRef = useInfiniteScroll(onLoadMore, loadingMore);
+
+  let content: React.ReactNode;
+
   if (error) {
-    return (
+    content = (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <p className="text-sm">Could not connect to cache server.</p>
         <p className="text-xs mt-1">{error}</p>
       </div>
     );
-  }
-
-  if (loading) {
-    return (
+  } else if (loading) {
+    content = (
       <div className="">
         {Array.from({ length: 3 }).map((_, i) => (
           <PostSkeleton key={i} />
         ))}
       </div>
     );
-  }
-
-  let feedPosts: Post[];
-  if (tab === "following" && followedPubkeys) {
-    feedPosts = posts.filter(
-      (p) =>
-        followedPubkeys.has(p.pubkey) &&
-        (p.kind === KIND_TEXT_NOTE ||
-          p.kind === KIND_REPOST ||
-          p.kind === KIND_QUOTE_REPOST ||
-          p.kind === KIND_TEXT_REPLY),
-    );
-  } else {
-    feedPosts = posts.filter(
-      (p) =>
-        p.kind === KIND_TEXT_NOTE ||
-        p.kind === KIND_REPOST ||
-        p.kind === KIND_QUOTE_REPOST ||
-        p.kind === KIND_TEXT_REPLY,
-    );
-  }
-
-  let filteredActivity: ActivityItem[] = activityItems ?? [];
-  if (tab === "following" && followedPubkeys) {
-    filteredActivity = filteredActivity.filter((a) => followedPubkeys.has(a.pubkey));
-  }
-
-  if (feedPosts.length === 0 && filteredActivity.length === 0) {
-    return (
+  } else if (items.length === 0) {
+    content = (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <p className="text-sm">No posts yet.</p>
-        <p className="text-xs mt-1">
-          {tab === "following"
-            ? "No posts from people you follow yet."
-            : "Be the first to post on bitcoin!"}
-        </p>
+        <p className="text-xs mt-1">Be the first to post on bitcoin!</p>
+      </div>
+    );
+  } else {
+    const postsById: Record<string, Post> = {};
+    const activityById: Record<string, ActivityItem> = {};
+    for (const item of items) {
+      if (item.feedType === "post") postsById[item.txid] = item;
+      else activityById[item.txid] = item;
+    }
+
+    content = (
+      <div className="">
+        {items.map((item) => {
+          if (item.feedType === "activity") {
+            return (
+              <ActivityCard
+                key={item.txid}
+                item={item}
+                profiles={profiles}
+                loggedInPubkey={loggedInPubkey}
+                onRefresh={onRefresh}
+              />
+            );
+          }
+          const post = item;
+          if (post.kind === KIND_REPOST || post.kind === KIND_QUOTE_REPOST) {
+            return (
+              <RepostCard
+                key={post.txid}
+                repost={post}
+                repostProfile={profiles[post.pubkey]}
+                originalPost={post.parentTxid ? (postsById[post.parentTxid] ?? null) : null}
+                originalProfile={post.parentTxid ? profiles[postsById[post.parentTxid]?.pubkey ?? ""] : undefined}
+                loggedInPubkey={loggedInPubkey}
+                onRefresh={onRefresh}
+                replyCount={post.replyCount ?? 0}
+                repostCount={post.repostCount ?? 0}
+              />
+            );
+          }
+          const parentPost = post.parentTxid ? (postsById[post.parentTxid] ?? null) : null;
+          const parentActivity = !parentPost && post.parentTxid ? (activityById[post.parentTxid] ?? null) : null;
+          return (
+            <PostCard
+              key={post.txid}
+              post={post}
+              profile={profiles[post.pubkey]}
+              parentPost={parentPost}
+              parentProfile={parentPost ? profiles[parentPost.pubkey] : undefined}
+              parentActivity={parentActivity}
+              replyCount={post.replyCount ?? 0}
+              repostCount={post.repostCount ?? 0}
+              loggedInPubkey={loggedInPubkey}
+              onRefresh={onRefresh}
+              noteOgLeaderboard={noteOgLeaderboard}
+              allProfiles={profiles}
+            />
+          );
+        })}
       </div>
     );
   }
 
-  const replyCountMap: Record<string, number> = {};
-  const repostCountMap: Record<string, number> = {};
-  for (const p of posts) {
-    if (p.kind === KIND_TEXT_REPLY && p.parentTxid) {
-      replyCountMap[p.parentTxid] = (replyCountMap[p.parentTxid] ?? 0) + 1;
-    } else if (
-      (p.kind === KIND_REPOST || p.kind === KIND_QUOTE_REPOST) &&
-      p.parentTxid
-    ) {
-      repostCountMap[p.parentTxid] = (repostCountMap[p.parentTxid] ?? 0) + 1;
-    }
-  }
-
-  const postsById: Record<string, Post> = {};
-  for (const p of posts) {
-    postsById[p.txid] = p;
-  }
-
-  const activityById: Record<string, ActivityItem> = {};
-  for (const a of filteredActivity) {
-    activityById[a.txid] = a;
-  }
-
-  // Merge posts and activity items sorted by timestamp desc
-  type FeedItem =
-    | { kind: "post"; post: Post; timestamp: number; txid: string }
-    | { kind: "activity"; item: ActivityItem; timestamp: number; txid: string };
-
-  const merged: FeedItem[] = [
-    ...feedPosts.map((p) => ({ kind: "post" as const, post: p, timestamp: p.timestamp, txid: p.txid })),
-    ...filteredActivity.map((a) => ({ kind: "activity" as const, item: a, timestamp: a.timestamp, txid: a.txid })),
-  ];
-  merged.sort((a, b) => b.timestamp - a.timestamp || a.txid.localeCompare(b.txid));
-
   return (
-    <div className="">
-      {merged.map((entry) => {
-        if (entry.kind === "activity") {
-          return <ActivityCard key={entry.txid} item={entry.item} profiles={profiles} loggedInPubkey={loggedInPubkey} onRefresh={onRefresh} />;
-        }
-        const post = entry.post;
-        if (post.kind === KIND_REPOST || post.kind === KIND_QUOTE_REPOST) {
-          return (
-            <RepostCard
-              key={post.txid}
-              repost={post}
-              repostProfile={profiles[post.pubkey]}
-              originalPost={
-                post.parentTxid ? (postsById[post.parentTxid] ?? null) : null
-              }
-              originalProfile={
-                post.parentTxid
-                  ? profiles[postsById[post.parentTxid]?.pubkey ?? ""]
-                  : undefined
-              }
-              loggedInPubkey={loggedInPubkey}
-              onRefresh={onRefresh}
-              replyCount={replyCountMap[post.txid] ?? 0}
-              repostCount={repostCountMap[post.txid] ?? 0}
-            />
-          );
-        }
-        const parentPost = post.parentTxid ? (postsById[post.parentTxid] ?? null) : null;
-        const parentActivity = !parentPost && post.parentTxid ? (activityById[post.parentTxid] ?? null) : null;
-        return (
-          <PostCard
-            key={post.txid}
-            post={post}
-            profile={profiles[post.pubkey]}
-            parentPost={parentPost}
-            parentProfile={parentPost ? profiles[parentPost.pubkey] : undefined}
-            parentActivity={parentActivity}
-            replyCount={replyCountMap[post.txid] ?? 0}
-            repostCount={repostCountMap[post.txid] ?? 0}
-            loggedInPubkey={loggedInPubkey}
-            onRefresh={onRefresh}
-            noteOgLeaderboard={noteOgLeaderboard}
-            allProfiles={profiles}
-          />
-        );
-      })}
+    <div>
+      {content}
+      {/* Sentinel is always rendered so the observer can attach on mount */}
+      {onLoadMore && (
+        <>
+          <div ref={sentinelRef} className="h-1" />
+          {loadingMore && <PostSkeleton />}
+          {!hasMore && !loadingMore && (
+            <p className="text-center text-xs text-muted-foreground py-6">You've reached the end.</p>
+          )}
+        </>
+      )}
     </div>
   );
 }

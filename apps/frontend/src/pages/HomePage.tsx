@@ -1,23 +1,18 @@
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { Feed } from "../components/Feed";
 import { PostForm } from "../components/PostForm";
 import { SetupProfileBanner } from "../components/SetupProfileBanner";
-import type { Post, Profile, ActivityItem } from "../types";
+import { useFeed } from "../hooks/useFeed";
+import type { Profile } from "../types";
 
 interface HomePageProps {
-  posts: Post[];
-  loading: boolean;
-  error: string | null;
   profiles: Record<string, Profile>;
   loggedInPubkey?: string | null;
   profile?: Profile;
   onLogin?: () => Promise<string | null>;
-  onRefresh?: () => void;
   onEditProfile?: () => void;
   followedPubkeys?: Set<string>;
-  activityItems?: ActivityItem[];
   noteOgLeaderboard?: {
     txid: string;
     rank: number;
@@ -28,22 +23,23 @@ interface HomePageProps {
 }
 
 export function HomePage({
-  posts,
-  loading,
-  error,
   profiles,
   loggedInPubkey,
   profile,
   onLogin,
-  onRefresh,
   onEditProfile,
   followedPubkeys,
-  activityItems,
   noteOgLeaderboard,
 }: HomePageProps) {
   const [tab, setTab] = useState<"global" | "following">("global");
   const [content, setContent] = useState(() => localStorage.getItem("ors_draft_post") ?? "");
   const [pendingPost, setPendingPost] = useState(() => !!localStorage.getItem("ors_pending_post"));
+
+  const filter =
+    tab === "following" && loggedInPubkey
+      ? { viewer: loggedInPubkey }
+      : undefined;
+  const { items, loading, error, refresh, loadMore, loadingMore, hasMore } = useFeed(filter);
 
   function handleContentChange(value: string) {
     setContent(value);
@@ -59,6 +55,21 @@ export function HomePage({
   const showTabs =
     !!loggedInPubkey && !!followedPubkeys && followedPubkeys.size > 0;
 
+  const feed = (
+    <Feed
+      items={items}
+      loading={loading}
+      error={error}
+      profiles={profiles}
+      loggedInPubkey={loggedInPubkey}
+      onRefresh={refresh}
+      noteOgLeaderboard={noteOgLeaderboard}
+      onLoadMore={loadMore}
+      loadingMore={loadingMore}
+      hasMore={hasMore}
+    />
+  );
+
   if (!showTabs) {
     return (
       <>
@@ -66,22 +77,13 @@ export function HomePage({
         <PostForm
           loggedInPubkey={loggedInPubkey ?? null}
           profile={profile}
-          onPosted={onRefresh ?? (() => {})}
+          onPosted={refresh}
           onLogin={onLogin ?? (() => Promise.resolve(null))}
           content={content}
           onContentChange={handleContentChange}
           pendingPost={pendingPost}
         />
-        <Feed
-          posts={posts}
-          loading={loading}
-          error={error}
-          profiles={profiles}
-          loggedInPubkey={loggedInPubkey}
-          onRefresh={onRefresh}
-          activityItems={activityItems}
-          noteOgLeaderboard={noteOgLeaderboard}
-        />
+        {feed}
       </>
     );
   }
@@ -99,36 +101,16 @@ export function HomePage({
       <PostForm
         loggedInPubkey={loggedInPubkey ?? null}
         profile={profile}
-        onPosted={onRefresh ?? (() => {})}
+        onPosted={refresh}
         onLogin={onLogin ?? (() => Promise.resolve(null))}
         content={content}
         onContentChange={handleContentChange}
       />
       <TabsContent value="global" className="mt-0">
-        <Feed
-          posts={posts}
-          loading={loading}
-          error={error}
-          profiles={profiles}
-          loggedInPubkey={loggedInPubkey}
-          onRefresh={onRefresh}
-          activityItems={activityItems}
-          noteOgLeaderboard={noteOgLeaderboard}
-        />
+        {feed}
       </TabsContent>
-      <TabsContent value="following">
-        <Feed
-          posts={posts}
-          loading={loading}
-          error={error}
-          profiles={profiles}
-          loggedInPubkey={loggedInPubkey}
-          onRefresh={onRefresh}
-          tab="following"
-          followedPubkeys={followedPubkeys}
-          activityItems={activityItems}
-          noteOgLeaderboard={noteOgLeaderboard}
-        />
+      <TabsContent value="following" className="mt-0">
+        {feed}
       </TabsContent>
     </Tabs>
   );

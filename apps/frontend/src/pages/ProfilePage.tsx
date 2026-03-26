@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { BoxIcon, Clock, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
@@ -34,11 +35,10 @@ import { TxidDropdownItem } from "../components/TxidDropdownItem";
 import { RepostCard } from "../components/RepostCard";
 import { ActivityCard } from "../components/ActivityCard";
 import {
-  fetchPosts,
+  fetchFeed,
   fetchFollows,
   fetchFollowers,
   fetchOgLeaderboard,
-  fetchActivity,
 } from "../api/cache";
 import type { FollowRecord } from "../api/cache";
 import { submitFollowFree } from "../api/facilitator";
@@ -47,12 +47,11 @@ import {
   buildFollowUnsignedPayload,
   buildV1SigningBody,
   getProtocolVersion,
-  KIND_TEXT_REPLY,
   KIND_REPOST,
   KIND_QUOTE_REPOST,
 } from "../lib/ors";
 import { signPayload } from "../lib/signing";
-import type { Post, Profile, ActivityItem } from "../types";
+import type { Post, Profile, ActivityItem, FeedItem } from "../types";
 import { nip19 } from "nostr-tools";
 
 interface ProfilePageProps {
@@ -84,9 +83,15 @@ export function ProfilePage({
 }: ProfilePageProps) {
   const { pubkey } = useParams<{ pubkey: string }>();
   const navigate = useNavigate();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [profileActivity, setProfileActivity] = useState<ActivityItem[]>([]);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const posts = feedItems.flatMap((i) => (i.feedType === "post" ? [i as Post] : []));
+  const profileActivity = feedItems.flatMap((i) => (i.feedType === "activity" ? [i as ActivityItem] : []));
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const offsetRef = useRef(20);
+  const loadingMoreRef = useRef(false);
+  const hasMoreRef = useRef(true);
   const [followingPubkeys, setFollowingPubkeys] = useState<string[]>([]);
   const [followerPubkeys, setFollowerPubkeys] = useState<string[]>([]);
   const [pendingFollowingPubkeys, setPendingFollowingPubkeys] = useState<
@@ -125,17 +130,19 @@ export function ProfilePage({
 
   const load = useCallback(async () => {
     if (!pubkey) return;
+    // Reset pagination state on (re)load
+    offsetRef.current = 20;
+    hasMoreRef.current = true;
+    setHasMore(true);
     try {
-      const [data, followsData, followers, ogData, activity] =
+      const [data, followsData, followers, ogData] =
         await Promise.all([
-          fetchPosts(50, 0, pubkey),
+          fetchFeed(20, 0, { pubkey }),
           fetchFollows(pubkey),
           fetchFollowers(pubkey),
           fetchOgLeaderboard(),
-          fetchActivity(50, 0, pubkey),
         ]);
-      setPosts(data);
-      setProfileActivity(activity);
+      setFeedItems(data);
       setFollowingPubkeys([
         ...followsData.pubkeys,
         ...followsData.pendingPubkeys,
@@ -158,6 +165,37 @@ export function ProfilePage({
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadMorePosts = useCallback(async () => {
+    if (!pubkey || loadingMoreRef.current || !hasMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const offset = offsetRef.current;
+      const data = await fetchFeed(20, offset, { pubkey });
+      if (data.length < 20) {
+        hasMoreRef.current = false;
+        setHasMore(false);
+      }
+      if (data.length > 0) {
+        offsetRef.current = offset + 20;
+        setFeedItems((prev) => {
+          const existingTxids = new Set(prev.map((i) => i.txid));
+          return [...prev, ...data.filter((i) => !existingTxids.has(i.txid))];
+        });
+      } else {
+        hasMoreRef.current = false;
+        setHasMore(false);
+      }
+    } catch {
+      // ignore
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [pubkey]); // stable per pubkey - guards are ref-based
+
+  const sentinelRef = useInfiniteScroll(loadMorePosts, loadingMore);
 
   async function doFollow() {
     if (!loggedInPubkey || !pubkey) return;
@@ -357,7 +395,7 @@ export function ProfilePage({
                         {item.network === "testnet4" && loggedInPubkey === pubkey && (
                           <MakePermanentButton
                             actionType="profile"
-                            pubkey={loggedInPubkey}
+                            pubkey={loggedInPubkey!}
                             propertyKind={kind}
                             content={fieldContent}
                             disabled={!fieldContent}
@@ -396,23 +434,12 @@ export function ProfilePage({
       ) : (
         <div className="space-y-3">
           {(() => {
-            const replyCountMap: Record<string, number> = {};
-            const repostCountMap: Record<string, number> = {};
+            // postsById uses both global context and profile-specific items for parent post lookup
             const postsById: Record<string, Post> = {};
             const activityById: Record<string, ActivityItem> = {};
             for (const a of allActivityItems ?? []) activityById[a.txid] = a;
-            for (const p of allPosts) {
-              postsById[p.txid] = p;
-              if (p.kind === KIND_TEXT_REPLY && p.parentTxid)
-                replyCountMap[p.parentTxid] =
-                  (replyCountMap[p.parentTxid] ?? 0) + 1;
-              else if (
-                (p.kind === KIND_REPOST || p.kind === KIND_QUOTE_REPOST) &&
-                p.parentTxid
-              )
-                repostCountMap[p.parentTxid] =
-                  (repostCountMap[p.parentTxid] ?? 0) + 1;
-            }
+            for (const p of allPosts) postsById[p.txid] = p;
+            for (const p of posts) postsById[p.txid] = p;
 
             type TimelineEntry =
               | { kind: "post"; post: Post; timestamp: number; txid: string }
@@ -494,8 +521,8 @@ export function ProfilePage({
                       ? (activityById[post.parentTxid] ?? null)
                       : null
                   }
-                  replyCount={replyCountMap[post.txid] ?? 0}
-                  repostCount={repostCountMap[post.txid] ?? 0}
+                  replyCount={post.replyCount ?? 0}
+                  repostCount={post.repostCount ?? 0}
                   loggedInPubkey={loggedInPubkey}
                   noteOgLeaderboard={noteOgLeaderboard}
                   allProfiles={profiles}
@@ -504,6 +531,13 @@ export function ProfilePage({
             });
           })()}
         </div>
+      )}
+
+      {/* Sentinel always in DOM so the observer can attach on mount */}
+      <div ref={sentinelRef} className="h-1" />
+      {loadingMore && <Skeleton className="h-24 w-full mt-3" />}
+      {!hasMore && !loadingMore && posts.length > 0 && (
+        <p className="text-center text-xs text-muted-foreground py-6">You've reached the end.</p>
       )}
 
       <Dialog open={ogModalOpen} onOpenChange={setOgModalOpen}>

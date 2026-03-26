@@ -310,10 +310,8 @@ export function createServer() {
     res.json({ profiles: result });
   });
 
-  async function attachCounts(items: Omit<StoredActivityItem, "replyCount" | "repostCount">[]): Promise<StoredActivityItem[]> {
-    const txids = items.map((i) => i.txid);
-    if (txids.length === 0) return items.map((i) => ({ ...i, replyCount: 0, repostCount: 0 }));
-
+  async function getCountsForTxids(txids: string[]): Promise<Record<string, { replyCount: number; repostCount: number }>> {
+    if (txids.length === 0) return {};
     const [repliers, reposters] = await Promise.all([
       prisma.post.groupBy({
         by: ["parentTxid"],
@@ -326,18 +324,138 @@ export function createServer() {
         _count: { txid: true },
       }),
     ]);
-
-    const replyCountMap: Record<string, number> = {};
-    for (const r of repliers) if (r.parentTxid) replyCountMap[r.parentTxid] = r._count.txid;
-    const repostCountMap: Record<string, number> = {};
-    for (const r of reposters) if (r.parentTxid) repostCountMap[r.parentTxid] = r._count.txid;
-
-    return items.map((i) => ({
-      ...i,
-      replyCount: replyCountMap[i.txid] ?? 0,
-      repostCount: repostCountMap[i.txid] ?? 0,
-    }));
+    const result: Record<string, { replyCount: number; repostCount: number }> = {};
+    for (const txid of txids) result[txid] = { replyCount: 0, repostCount: 0 };
+    for (const r of repliers) if (r.parentTxid) result[r.parentTxid] = { ...result[r.parentTxid], replyCount: r._count.txid };
+    for (const r of reposters) if (r.parentTxid) result[r.parentTxid] = { ...result[r.parentTxid], repostCount: r._count.txid };
+    return result;
   }
+
+  async function attachCounts(items: Omit<StoredActivityItem, "replyCount" | "repostCount">[]): Promise<StoredActivityItem[]> {
+    const txids = items.map((i) => i.txid);
+    if (txids.length === 0) return items.map((i) => ({ ...i, replyCount: 0, repostCount: 0 }));
+    const counts = await getCountsForTxids(txids);
+    return items.map((i) => ({ ...i, ...(counts[i.txid] ?? { replyCount: 0, repostCount: 0 }) }));
+  }
+
+  // Unified feed endpoint: merges posts + activity items, sorted by timestamp.
+  // ?viewer=X  → following feed (posts/activity by users X follows, resolved server-side)
+  // ?pubkey=X  → profile feed (posts/activity by user X)
+  // (none)     → global feed
+  app.get("/feed", async (req, res) => {
+    const limit = Math.min(Number(req.query.limit ?? 20), 200);
+    const offset = Number(req.query.offset ?? 0);
+    const pubkey = req.query.pubkey as string | undefined;
+    const viewer = req.query.viewer as string | undefined;
+    const fetchLimit = limit + offset;
+
+    // Resolve which pubkeys to filter by
+    let filterPubkeys: string[] | undefined;
+    let filterSinglePubkey: string | undefined;
+
+    if (viewer) {
+      const viewerFollows = await prisma.follow.findMany({
+        where: { followerPubkey: viewer, isFollow: true, status: { not: "evicted" } },
+        select: { followeePubkey: true },
+      });
+      filterPubkeys = [...new Set(viewerFollows.map((f) => f.followeePubkey))];
+      if (filterPubkeys.length === 0) {
+        res.json({ items: [] });
+        return;
+      }
+    } else if (pubkey) {
+      filterSinglePubkey = pubkey;
+    }
+
+    const postWhere = {
+      status: { not: "evicted" as const },
+      ...(filterPubkeys ? { pubkey: { in: filterPubkeys } } : filterSinglePubkey ? { pubkey: filterSinglePubkey } : {}),
+    };
+    const followWhere = {
+      status: { not: "evicted" as const },
+      ...(filterPubkeys ? { followerPubkey: { in: filterPubkeys } } : filterSinglePubkey ? { followerPubkey: filterSinglePubkey } : {}),
+    };
+    const profileUpdateWhere = {
+      status: { not: "evicted" as const },
+      ...(filterPubkeys ? { pubkey: { in: filterPubkeys } } : filterSinglePubkey ? { pubkey: filterSinglePubkey } : {}),
+    };
+
+    const [mainnetPosts, testnet4Posts, follows, profileUpdates] = await Promise.all([
+      prisma.post.findMany({
+        where: { ...postWhere, network: "mainnet" },
+        orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
+        take: fetchLimit,
+      }),
+      prisma.post.findMany({
+        where: { ...postWhere, network: "testnet4" },
+        orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
+        take: fetchLimit,
+      }),
+      prisma.follow.findMany({ where: followWhere }),
+      prisma.profileUpdateEvent.findMany({ where: profileUpdateWhere }),
+    ]);
+
+    // Merge + dedup posts (mainnet wins on same sig)
+    const mergedPosts: typeof mainnetPosts = [];
+    let mi = 0, ti = 0;
+    while (mergedPosts.length < fetchLimit && (mi < mainnetPosts.length || ti < testnet4Posts.length)) {
+      const m = mainnetPosts[mi];
+      const t = testnet4Posts[ti];
+      if (!t || (m && m.timestamp >= t.timestamp)) { mergedPosts.push(m); mi++; }
+      else { mergedPosts.push(t); ti++; }
+    }
+    const mainnetPostSigs = new Set(mainnetPosts.map((p) => p.sig));
+    const dedupedPosts = mergedPosts.filter((p) => p.network === "mainnet" || !mainnetPostSigs.has(p.sig));
+
+    // Dedup activity (mainnet wins)
+    const followsMap = new Map<string, typeof follows[0]>();
+    for (const f of follows) {
+      const key = `${f.followerPubkey}:${f.followeePubkey}`;
+      const existing = followsMap.get(key);
+      if (!existing || f.network === "mainnet") followsMap.set(key, f);
+    }
+    const dedupedFollows = Array.from(followsMap.values());
+
+    const profileUpdatesMap = new Map<string, typeof profileUpdates[0]>();
+    for (const e of profileUpdates) {
+      const existing = profileUpdatesMap.get(e.sig);
+      if (!existing || e.network === "mainnet") profileUpdatesMap.set(e.sig, e);
+    }
+    const dedupedProfileUpdates = Array.from(profileUpdatesMap.values());
+
+    // Build unified timeline with feedType discriminator
+    type RawItem = { feedType: "post" | "activity"; timestamp: number; txid: string; data: Record<string, unknown> };
+    const allItems: RawItem[] = [
+      ...dedupedPosts.map((p) => ({
+        feedType: "post" as const,
+        timestamp: p.timestamp,
+        txid: p.txid,
+        data: { feedType: "post", txid: p.txid, network: p.network, blockHeight: p.blockHeight, timestamp: p.timestamp, content: p.content, kind: p.kind, pubkey: p.pubkey, sig: p.sig, parentTxid: p.parentTxid, status: p.status },
+      })),
+      ...dedupedFollows.map((f) => ({
+        feedType: "activity" as const,
+        timestamp: f.timestamp,
+        txid: f.txid,
+        data: { feedType: "activity", type: f.isFollow ? "follow" : "unfollow", txid: f.txid, network: f.network, pubkey: f.followerPubkey, timestamp: f.timestamp, blockHeight: f.blockHeight, status: f.status, targetPubkey: f.followeePubkey },
+      })),
+      ...dedupedProfileUpdates.map((e) => ({
+        feedType: "activity" as const,
+        timestamp: e.timestamp,
+        txid: e.txid,
+        data: { feedType: "activity", type: "profile_update", txid: e.txid, network: e.network, pubkey: e.pubkey, timestamp: e.timestamp, blockHeight: e.blockHeight, status: e.status, propertyKind: e.propertyKind, value: e.value },
+      })),
+    ];
+
+    allItems.sort((a, b) => b.timestamp - a.timestamp || a.txid.localeCompare(b.txid));
+    const page = allItems.slice(offset, offset + limit);
+
+    // Attach reply/repost counts to all items
+    const txids = page.map((i) => i.txid);
+    const counts = await getCountsForTxids(txids);
+    const items = page.map((i) => ({ ...i.data, ...(counts[i.txid] ?? { replyCount: 0, repostCount: 0 }) }));
+
+    res.json({ items });
+  });
 
   app.get("/activity/:txid", async (req, res) => {
     const { txid } = req.params;

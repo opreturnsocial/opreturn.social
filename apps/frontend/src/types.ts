@@ -9,6 +9,8 @@ export interface Post {
   sig: string;
   parentTxid?: string | null;
   status: string;
+  replyCount?: number;
+  repostCount?: number;
 }
 
 export interface Profile {
@@ -33,6 +35,10 @@ export interface ActivityItem {
   replyCount: number;
   repostCount: number;
 }
+
+export type FeedItem =
+  | ({ feedType: "post" } & Post)
+  | ({ feedType: "activity" } & ActivityItem);
 
 // Alby Extension Nostr API (window.nostr)
 declare global {

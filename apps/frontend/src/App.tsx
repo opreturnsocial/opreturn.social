@@ -26,10 +26,9 @@ import {
   fetchProfiles,
   fetchFollows,
   fetchNoteOgRanks,
-  fetchActivity,
 } from "./api/cache";
 import { getNostrExtPubkey } from "./lib/nostr";
-import type { Profile, ActivityItem } from "./types";
+import type { Profile } from "./types";
 import {
   Dialog,
   DialogContent,
@@ -52,7 +51,6 @@ export function App() {
     return localStorage.getItem("ors_wallet_funded") === "true";
   });
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
-  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
   const [noteOgLeaderboard, setNoteOgLeaderboard] = useState<
     {
       txid: string;
@@ -68,7 +66,9 @@ export function App() {
   const [pendingFollowPubkeys, setPendingFollowPubkeys] = useState<Set<string>>(
     new Set(),
   );
-  const { posts, loading, error, refresh } = useFeed();
+  const { items: feedItems } = useFeed();
+  const allPosts = feedItems.flatMap((i) => (i.feedType === "post" ? [i] : []));
+  const allActivityItems = feedItems.flatMap((i) => (i.feedType === "activity" ? [i] : []));
   const [walletBalance, refreshWalletBalance] = useWalletBalance();
 
   async function refreshProfiles() {
@@ -89,19 +89,9 @@ export function App() {
     }
   }
 
-  async function refreshActivity() {
-    try {
-      const items = await fetchActivity();
-      setActivityItems(items);
-    } catch {
-      // silently ignore
-    }
-  }
-
   useEffect(() => {
     refreshProfiles();
     refreshNoteOgRanks();
-    refreshActivity();
     const saved = localStorage.getItem("ors_pubkey");
     if (saved) {
       setLoggedInPubkey(saved);
@@ -211,19 +201,14 @@ export function App() {
                     path="/"
                     element={
                       <HomePage
-                        posts={posts}
-                        loading={loading}
-                        error={error}
                         profiles={profiles}
                         loggedInPubkey={loggedInPubkey}
                         profile={
                           loggedInPubkey ? profiles[loggedInPubkey] : undefined
                         }
                         onLogin={handleLogin}
-                        onRefresh={refresh}
                         onEditProfile={() => setProfileModalOpen(true)}
                         followedPubkeys={followedPubkeys}
-                        activityItems={activityItems}
                         noteOgLeaderboard={noteOgLeaderboard}
                       />
                     }
@@ -234,8 +219,8 @@ export function App() {
                       <TxPage
                         profiles={profiles}
                         loggedInPubkey={loggedInPubkey}
-                        allPosts={posts}
-                        allActivityItems={activityItems}
+                        allPosts={allPosts}
+                        allActivityItems={allActivityItems}
                         noteOgLeaderboard={noteOgLeaderboard}
                       />
                     }
@@ -248,8 +233,8 @@ export function App() {
                     element={
                       <ProfilePage
                         profiles={profiles}
-                        allPosts={posts}
-                        allActivityItems={activityItems}
+                        allPosts={allPosts}
+                        allActivityItems={allActivityItems}
                         loggedInPubkey={loggedInPubkey}
                         followedPubkeys={followedPubkeys}
                         pendingFollowPubkeys={pendingFollowPubkeys}
