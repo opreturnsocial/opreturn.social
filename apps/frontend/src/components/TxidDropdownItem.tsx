@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { shortenTxid } from "@/lib/utils";
+import { shortenTxid, mempoolTxUrl } from "@/lib/utils";
 
 interface TxidDropdownItemProps {
   txid: string;
@@ -22,8 +22,7 @@ export function TxidDropdownItem({ txid, network, children }: TxidDropdownItemPr
 
   function handleOpen(e: React.MouseEvent) {
     e.stopPropagation();
-    const base = network === "testnet4" ? "https://mempool.space/testnet4" : "https://mempool.space";
-    window.open(`${base}/tx/${txid}`, "_blank");
+    window.open(mempoolTxUrl(txid, network), "_blank");
   }
 
   return (

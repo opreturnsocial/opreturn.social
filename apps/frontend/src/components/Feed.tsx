@@ -168,6 +168,8 @@ export function Feed({
               }
               loggedInPubkey={loggedInPubkey}
               onRefresh={onRefresh}
+              replyCount={replyCountMap[post.txid] ?? 0}
+              repostCount={repostCountMap[post.txid] ?? 0}
             />
           );
         }

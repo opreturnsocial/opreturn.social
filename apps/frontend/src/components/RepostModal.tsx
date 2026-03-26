@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { mempoolTxUrl } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -73,7 +74,7 @@ export function RepostModal({
       }
 
       toast.success(`${isQuote ? "Quote reposted" : "Reposted"}!`, {
-        description: `Testnet TXID: ${res.txid}`,
+        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(res.txid, "testnet4"), "_blank") },
       });
       setQuote("");
       onOpenChange(false);

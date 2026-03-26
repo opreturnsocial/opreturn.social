@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { BoxIcon, Clock, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
+import { mempoolTxUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -188,7 +189,7 @@ export function ProfilePage({
       setPendingFollowerPubkeys(new Set(followers.pendingPubkeys));
       setFollowerInfo(new Map(followers.follows.map((f) => [f.pubkey, f])));
       toast.success(newIsFollow ? "Followed!" : "Unfollowed!", {
-        description: `Testnet TXID: ${txid}`,
+        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, "testnet4"), "_blank") },
       });
     } catch (err) {
       toast.error((err as Error).message ?? "Failed");

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { mempoolTxUrl } from "@/lib/utils";
 import { BoxIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,7 +56,7 @@ export function SponsorButton({
     try {
       const invoiceRes = await sponsorTransaction(testnetTxid, getProtocolVersion());
       const { txid } = await payAndBroadcast(invoiceRes.invoice, invoiceRes.paymentHash);
-      toast.success("Broadcast to bitcoin mainnet!", { description: `TXID: ${txid}` });
+      toast.success("Broadcast to bitcoin mainnet!", { action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid), "_blank") } });
       setOpen(false);
       onSuccess();
     } catch (err) {

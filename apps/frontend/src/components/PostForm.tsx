@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { mempoolTxUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { submitPostFree, submitPost } from "../api/facilitator";
@@ -69,7 +70,7 @@ export function PostForm({
       const signingPayload = version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, pubkey);
       const { txid } = await submitPostFree(content.trim(), pubkey, sig, version);
-      toast.success("Posted!", { description: `Testnet TXID: ${txid}` });
+      toast.success("Posted!", { action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, "testnet4"), "_blank") } });
       onContentChange("");
       onPosted();
     } catch (err) {
@@ -89,7 +90,7 @@ export function PostForm({
       const sig = await signPayload(signingPayload, pubkey);
       const { invoice, paymentHash } = await submitPost(content.trim(), pubkey, sig, version);
       const { txid } = await payAndBroadcast(invoice, paymentHash);
-      toast.success("Posted to mainnet!", { description: `TXID: ${txid}` });
+      toast.success("Posted to mainnet!", { action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid), "_blank") } });
       onContentChange("");
       setTestnetFailed(false);
       onPosted();

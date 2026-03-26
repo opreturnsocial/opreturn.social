@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BoxIcon, Clock, MessageCircle, MoreHorizontal, Repeat2Icon, Share2 } from "lucide-react";
-import { toast } from "sonner";
+import { Clock, MoreHorizontal } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CardActions } from "./CardActions";
 import { RepostModal } from "./RepostModal";
-import { SponsorButton } from "./SponsorButton";
 import { TxidDropdownItem } from "./TxidDropdownItem";
 import { formatRelativeTime } from "../lib/utils";
 import type { ActivityItem, Profile } from "../types";
@@ -126,9 +125,6 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
             </Link>
           </div>
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            {item.network !== "testnet4" && (
-              <span title="On-chain bitcoin transaction"><BoxIcon className="w-3.5 h-3.5 text-orange-500" /></span>
-            )}
             {item.blockHeight === 0 && (
               <div title="Unconfirmed Transaction">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
@@ -151,44 +147,18 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
           </div>
         </div>
         {body}
-        <div className="mt-3 flex items-center gap-3">
-          <div
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-            {item.replyCount > 0 && <span>{item.replyCount}</span>}
-          </div>
-          <div
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); setRepostOpen(true); }}
-          >
-            <Repeat2Icon className="size-4" />
-            {item.repostCount > 0 && <span>{item.repostCount}</span>}
-          </div>
-          <div
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            onClick={async (e) => {
-              e.stopPropagation();
-              const url = `${window.location.origin}/tx/${item.txid}`;
-              if (navigator.share) {
-                await navigator.share({ title: "ORS Activity", url });
-              } else {
-                await navigator.clipboard.writeText(url);
-                toast.success("Link copied!");
-              }
-            }}
-          >
-            <Share2 className="h-3.5 w-3.5" />
-          </div>
-          {item.network === "testnet4" && loggedInPubkey && (
-            <SponsorButton
-              testnetTxid={item.txid}
-              loggedInPubkey={loggedInPubkey}
-              onSuccess={() => onRefresh?.()}
-            />
-          )}
-        </div>
+        <CardActions
+          txid={item.txid}
+          network={item.network}
+          loggedInPubkey={loggedInPubkey}
+          onRefresh={onRefresh}
+          replyCount={item.replyCount}
+          onReplyClick={() => navigate(`/tx/${item.txid}`)}
+          repostCount={item.repostCount}
+          onRepostClick={() => setRepostOpen(true)}
+          shareUrl={`${window.location.origin}/tx/${item.txid}`}
+          shareTitle="ORS Activity"
+        />
       </CardContent>
       <RepostModal
         open={repostOpen}

@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Repeat2 } from "lucide-react";
 import { KIND_QUOTE_REPOST } from "../lib/ors";
 import { formatRelativeTime } from "../lib/utils";
-import { SponsorButton } from "./SponsorButton";
+import { CardActions } from "./CardActions";
+import { RepostModal } from "./RepostModal";
 import type { Post, Profile } from "../types";
 
 interface RepostCardProps {
@@ -13,6 +15,8 @@ interface RepostCardProps {
   originalProfile?: Profile;
   loggedInPubkey?: string | null;
   onRefresh?: () => void;
+  replyCount?: number;
+  repostCount?: number;
 }
 
 export function RepostCard({
@@ -22,8 +26,11 @@ export function RepostCard({
   originalProfile,
   loggedInPubkey,
   onRefresh,
+  replyCount,
+  repostCount,
 }: RepostCardProps) {
   const navigate = useNavigate();
+  const [repostOpen, setRepostOpen] = useState(false);
 
   const repostDisplayName =
     repostProfile?.name ?? `${repost.pubkey.slice(0, 8)}…`;
@@ -91,18 +98,27 @@ export function RepostCard({
             Original post not available
           </div>
         )}
-        {repost.network === "testnet4" && loggedInPubkey && (() => {
-          return (
-            <div className="mt-3 flex" onClick={(e) => e.stopPropagation()}>
-              <SponsorButton
-                testnetTxid={repost.txid}
-                loggedInPubkey={loggedInPubkey}
-                onSuccess={() => onRefresh?.()}
-              />
-            </div>
-          );
-        })()}
+        <CardActions
+          txid={repost.txid}
+          network={repost.network}
+          loggedInPubkey={loggedInPubkey}
+          onRefresh={onRefresh}
+          replyCount={replyCount}
+          onReplyClick={() => navigate(`/tx/${repost.txid}`)}
+          repostCount={repostCount}
+          onRepostClick={() => setRepostOpen(true)}
+          shareUrl={`${window.location.origin}/tx/${repost.txid}`}
+          shareTitle="ORS Repost"
+        />
       </CardContent>
+      <RepostModal
+        open={repostOpen}
+        onOpenChange={setRepostOpen}
+        onReposted={() => onRefresh?.()}
+        txid={repost.txid}
+        displayContent={repost.content || originalPost?.content || ""}
+        loggedInPubkey={loggedInPubkey ?? null}
+      />
     </Card>
   );
 }

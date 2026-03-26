@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { mempoolTxUrl } from "@/lib/utils";
 import { Clock, Check, Copy, ExternalLink, AlertTriangle } from "lucide-react";
 import { fetchActivity } from "../api/cache";
 import type { ActivityItem } from "../types";
@@ -116,8 +117,7 @@ export function ProfileModal({
         <button
           className="text-muted-foreground hover:text-foreground transition-colors"
           onClick={() => {
-            const base = item.network === "testnet4" ? "https://mempool.space/testnet4" : "https://mempool.space";
-            window.open(`${base}/tx/${item.txid}`, "_blank");
+            window.open(mempoolTxUrl(item.txid, item.network), "_blank");
           }}
         >
           <ExternalLink className="h-3 w-3" />
@@ -163,7 +163,7 @@ export function ProfileModal({
       );
 
       toast.success(`${fieldName} saved`, {
-        description: `Testnet TXID: ${txid}`,
+        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, "testnet4"), "_blank") },
       });
       onProfileUpdated();
     } catch (err) {

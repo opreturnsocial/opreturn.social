@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { mempoolTxUrl } from "@/lib/utils";
 import { BoxIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -192,7 +193,7 @@ export function MakePermanentButton({
       }
 
       const { txid } = await payAndBroadcast(invoiceRes.invoice, invoiceRes.paymentHash);
-      toast.success("Posted permanently to bitcoin!", { description: `TXID: ${txid}` });
+      toast.success("Posted permanently to bitcoin!", { action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid), "_blank") } });
       setOpen(false);
       onSuccess();
     } catch (err) {

@@ -9,6 +9,11 @@ export function shortenTxid(txid: string): string {
   return `${txid.slice(0, 8)}...${txid.slice(-8)}`;
 }
 
+export function mempoolTxUrl(txid: string, network?: string): string {
+  const base = network === "testnet4" ? "https://mempool.space/testnet4" : "https://mempool.space";
+  return `${base}/tx/${txid}`;
+}
+
 export function formatRelativeTime(timestamp: number): string {
   if (timestamp === 0) return "just now";
   const diffMs = Date.now() - timestamp * 1000;
