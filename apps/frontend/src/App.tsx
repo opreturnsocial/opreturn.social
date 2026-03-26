@@ -139,12 +139,6 @@ export function App() {
     if (pubkey) navigate("/");
   }
 
-  function handleLocalLoginAndRedirect(pubkey: string) {
-    setLoggedInPubkey(pubkey);
-    refreshFollows(pubkey);
-    navigate("/");
-  }
-
   function handleLoginComplete() {
     const pubkey = localStorage.getItem("ors_pubkey")!;
     setLoggedInPubkey(pubkey);
@@ -186,7 +180,6 @@ export function App() {
             ) : (
               <AuthPage
                 onLoginWithExtension={handleLoginAndRedirect}
-                onQuickStartComplete={handleLocalLoginAndRedirect}
                 onLoginComplete={handleLoginComplete}
               />
             )

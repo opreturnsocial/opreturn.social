@@ -5,9 +5,6 @@ import {
   KeyIcon,
   GlobeIcon,
   BoxIcon,
-  Copy,
-  Check,
-  Wallet,
   LockIcon,
 } from "lucide-react";
 import { LogoIcon } from "@/icons/LogoIcon";
@@ -16,8 +13,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
-import { WalletFundingView } from "@/components/WalletFundingView";
-import { NWCClient } from "@getalby/sdk/nwc";
 import { getNostrExtPubkey } from "@/lib/nostr";
 
 type AuthStep =
@@ -26,23 +21,16 @@ type AuthStep =
   | "signup-choice"
   | "login-choice"
   | "quick-start-key"
-  | "wallet-choice"
-  | "wallet-fund"
-  | "wallet-nwc-paste"
-  | "wallet-low-balance"
   | "enter-nsec";
 
 export function AuthPage({
   onLoginWithExtension,
-  onQuickStartComplete,
   onLoginComplete,
 }: {
   onLoginWithExtension: () => Promise<void>;
-  onQuickStartComplete: (pubkey: string) => void;
   onLoginComplete: () => void;
 }) {
   const [step, setStep] = useState<AuthStep>("landing");
-  const [nwcBalance, setNwcBalance] = useState(0);
 
   async function handleNostrExtPubkey() {
     const pubkey = await getNostrExtPubkey();
@@ -102,63 +90,6 @@ export function AuthPage({
         onBack={() => setStep("login-choice")}
         onContinue={onLoginComplete}
       />
-    );
-  }
-  if (step === "wallet-choice") {
-    return (
-      <WalletChoiceView
-        onEmbedded={() => setStep("wallet-fund")}
-        onNwcPaste={() => setStep("wallet-nwc-paste")}
-      />
-    );
-  }
-  if (step === "wallet-fund") {
-    return (
-      <WalletFundView
-        onBack={() => setStep("wallet-choice")}
-        onComplete={onLoginComplete}
-      />
-    );
-  }
-  if (step === "wallet-nwc-paste") {
-    return (
-      <WalletNwcPasteView
-        onBack={() => setStep("wallet-choice")}
-        onComplete={onLoginComplete}
-        onLowBalance={(sats) => {
-          setNwcBalance(sats);
-          setStep("wallet-low-balance");
-        }}
-      />
-    );
-  }
-  if (step === "wallet-low-balance") {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="w-full max-w-md space-y-6">
-            <div className="space-y-1">
-              <h1 className="text-2xl font-bold">Top up your wallet</h1>
-              <p className="text-muted-foreground text-sm">
-                Your wallet has{" "}
-                <span className="font-semibold text-foreground">
-                  {nwcBalance.toLocaleString()} sats
-                </span>
-                . Pay the invoice below to add 5,000 sats and start posting.
-              </p>
-            </div>
-            <WalletFundingView showTitle={false} onComplete={onLoginComplete} />
-            <div className="flex justify-center">
-              <button
-                className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-                onClick={() => setStep("wallet-nwc-paste")}
-              >
-                Try a different wallet
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     );
   }
 }
@@ -314,8 +245,8 @@ function SignupChoiceView({
                   <h2 className="font-bold text-lg">Quick Start</h2>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  A custodial wallet and key will generated and saved in this
-                  browser. Faster setup, less secure.
+                  A key will be generated and saved in this browser. Faster
+                  setup, less secure.
                 </p>
                 <Button className="w-full" onClick={onQuickStart}>
                   Quick Start
@@ -378,7 +309,7 @@ function SignupChoiceView({
               className="w-full h-11"
               onClick={onEnterNsec}
             >
-              Connect wallet and enter key
+              Enter key
             </Button>
           </div>
         </div>
@@ -394,16 +325,9 @@ function QuickStartKeyView({
   onBack: () => void;
   onContinue: () => void;
 }) {
-  const [pubkeyHex, setPubkeyHex] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
   useEffect(() => {
     // Generate key if not already done
-    const existing = localStorage.getItem("ors_pubkey");
-    if (existing) {
-      setPubkeyHex(existing);
-      return;
-    }
+    if (localStorage.getItem("ors_pubkey")) return;
     const privKey = generateSecretKey();
     const pubHex = getPublicKey(privKey);
     const privHex = Array.from(privKey)
@@ -411,17 +335,7 @@ function QuickStartKeyView({
       .join("");
     localStorage.setItem("ors_local_privkey", privHex);
     localStorage.setItem("ors_pubkey", pubHex);
-    setPubkeyHex(pubHex);
   }, []);
-
-  const npub = pubkeyHex ? nip19.npubEncode(pubkeyHex) : null;
-
-  function copyPubkey() {
-    if (!npub) return;
-    navigator.clipboard.writeText(npub);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -442,7 +356,10 @@ function QuickStartKeyView({
           </div>
 
           <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
-            <p className="font-semibold mb-1 flex items-center gap-1"><LockIcon className="h-3.5 w-3.5" />Back up your key anytime</p>
+            <p className="font-semibold mb-1 flex items-center gap-1">
+              <LockIcon className="h-3.5 w-3.5" />
+              Back up your key anytime
+            </p>
             <p>
               You can export your private key from Settings at any time. Without
               a backup, you cannot recover your account if you lose access to
@@ -453,29 +370,6 @@ function QuickStartKeyView({
           <Button className="w-full h-11" onClick={onContinue}>
             Continue
           </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function QuickStartWalletView({
-  onBack,
-  onComplete,
-}: {
-  onBack: () => void;
-  onComplete: (pubkey: string) => void;
-}) {
-  function handleComplete() {
-    const pubkey = localStorage.getItem("ors_pubkey")!;
-    onComplete(pubkey);
-  }
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          <WalletFundingView onComplete={handleComplete} />
         </div>
       </div>
     </div>
@@ -538,10 +432,10 @@ function LoginChoiceView({
               className="w-full h-11"
               onClick={onEnterNsec}
             >
-              Connect wallet and enter key
+              Enter key
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Your wallet and key will be saved in browser storage.
+              Your key will be saved in browser storage.
             </p>
           </div>
         </div>
@@ -614,7 +508,9 @@ function EnterNsecView({
             <p className="font-semibold mb-1">Your key stays in your browser</p>
             <p>
               Your private key is never sent to any server. It is stored only in
-              this browser's local storage.
+              this browser's local storage. For best security, use the{" "}
+              <span className="font-medium">Alby Browser Extension</span> to
+              store your key.
             </p>
           </div>
 
@@ -625,181 +521,6 @@ function EnterNsecView({
               disabled={!nsec.trim()}
             >
               Continue
-            </Button>
-            <Button variant="ghost" className="w-full" onClick={onBack}>
-              Back
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WalletChoiceView({
-  onEmbedded,
-  onNwcPaste,
-}: {
-  onEmbedded: () => void;
-  onNwcPaste: () => void;
-}) {
-  return (
-    <div className="min-h-screen flex flex-col">
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold">Set up your wallet</h1>
-            <p className="text-muted-foreground mt-1">
-              You need a lightning wallet to post.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <Card className="border-primary border-2">
-              <CardContent className="p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
-                  <h2 className="font-bold text-lg">Embedded wallet</h2>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  We create a custodial wallet for you via lncurl.lol. Fund it
-                  with 5,000 sats to start posting. Zero config.
-                </p>
-                <Button className="w-full" onClick={onEmbedded}>
-                  Create embedded wallet
-                </Button>
-              </CardContent>
-            </Card>
-
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <Separator className="flex-1" />
-            </div>
-
-            <Card>
-              <CardContent className="p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-5 w-5 text-muted-foreground" />
-                  <h2 className="font-bold text-lg text-muted-foreground">
-                    Connect existing wallet
-                  </h2>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Paste a Nostr Wallet Connect URL from any compatible wallet
-                  (Alby, Mutiny, etc.).
-                </p>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={onNwcPaste}
-                >
-                  Paste NWC URL
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WalletFundView({
-  onBack,
-  onComplete,
-}: {
-  onBack: () => void;
-  onComplete: () => void;
-}) {
-  return (
-    <div className="min-h-screen flex flex-col">
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          <WalletFundingView onComplete={onComplete} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WalletNwcPasteView({
-  onBack,
-  onComplete,
-  onLowBalance,
-}: {
-  onBack: () => void;
-  onComplete: () => void;
-  onLowBalance: (sats: number) => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [checking, setChecking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit() {
-    setError(null);
-    const trimmed = url.trim();
-    if (!trimmed.startsWith("nostr+walletconnect://")) {
-      setError("URL must start with nostr+walletconnect://");
-      return;
-    }
-    setChecking(true);
-    try {
-      const client = new NWCClient({ nostrWalletConnectUrl: trimmed });
-      const { balance } = await client.getBalance();
-      client.close();
-      const sats = Math.floor(balance / 1000);
-      localStorage.setItem("ors_nwc_url", trimmed);
-      localStorage.setItem("ors_nwc_user_provided", "true");
-      if (sats >= 5000) {
-        localStorage.setItem("ors_wallet_funded", "true");
-        onComplete();
-      } else {
-        onLowBalance(sats);
-      }
-    } catch {
-      setError("Could not connect to wallet. Please check your URL.");
-    } finally {
-      setChecking(false);
-    }
-  }
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md space-y-6">
-          <div className="flex items-center justify-center">
-            <div className="h-16 w-16 rounded-full bg-orange-100 flex items-center justify-center">
-              <Wallet className="h-8 w-8 text-orange-600" />
-            </div>
-          </div>
-
-          <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-bold">Connect your wallet</h1>
-            <p className="text-muted-foreground text-sm">
-              Paste your Nostr Wallet Connect URL below. Your wallet needs at
-              least 5,000 sats.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Textarea
-              placeholder="nostr+walletconnect://..."
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="font-mono text-sm resize-none"
-              rows={4}
-            />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <Button
-              className="w-full h-11"
-              onClick={handleSubmit}
-              disabled={!url.trim() || checking}
-            >
-              {checking ? "Checking balance..." : "Connect wallet"}
             </Button>
             <Button variant="ghost" className="w-full" onClick={onBack}>
               Back
