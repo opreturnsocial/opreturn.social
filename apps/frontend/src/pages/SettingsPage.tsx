@@ -13,7 +13,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getProtocolVersion } from "../lib/ors";
-import { getFeeBumpSatPerVByte, getFeePriority, setFeePriority, type FeePriority } from "../lib/fees";
+import {
+  getFeeBumpSatPerVByte,
+  getFeePriority,
+  setFeePriority,
+  type FeePriority,
+} from "../lib/fees";
 
 function SecretRow({
   label,
@@ -61,6 +66,8 @@ function SecretRow({
 const donationAddress = import.meta.env.VITE_FACILITATOR_DONATION_ADDRESS as
   | string
   | undefined;
+const donationAddressTestnet4 = import.meta.env
+  .VITE_FACILITATOR_DONATION_ADDRESS_TESTNET4 as string | undefined;
 const allowBroadcastV0 = import.meta.env.VITE_ALLOW_BROADCAST_V0 === "true";
 
 export function SettingsPage() {
@@ -71,17 +78,19 @@ export function SettingsPage() {
   const [protocolVersion, setProtocolVersionState] =
     useState(getProtocolVersion);
   const [feeBump, setFeeBumpState] = useState(getFeeBumpSatPerVByte);
-  const [feePriority, setFeePriorityState] = useState<FeePriority>(getFeePriority);
-  const [showExplainer, setShowExplainerState] = useState(
-    localStorage.getItem("ors_hide_posting_explainer") !== "true"
-  );
+  const [feePriority, setFeePriorityState] =
+    useState<FeePriority>(getFeePriority);
   const hasPrivkey = !!localStorage.getItem("ors_local_privkey");
   const hasSecrets = hasPrivkey || hasNwcUrl;
 
   function handleFeePriorityChange(p: FeePriority) {
     setFeePriority(p);
     setFeePriorityState(p);
-    toast.success(p === "high" ? "Priority set to High (next block)" : "Priority set to Medium (~3 blocks)");
+    toast.success(
+      p === "high"
+        ? "Priority set to High (next block)"
+        : "Priority set to Medium (~3 blocks)",
+    );
   }
 
   function handleFeeBumpChange(v: number) {
@@ -203,8 +212,16 @@ export function SettingsPage() {
           </p>
           {(
             [
-              { p: "medium" as FeePriority, label: "Medium", description: "~3 blocks - lower fee, default" },
-              { p: "high" as FeePriority, label: "High", description: "Next block - faster, higher fee" },
+              {
+                p: "medium" as FeePriority,
+                label: "Medium",
+                description: "~3 blocks - lower fee, default",
+              },
+              {
+                p: "high" as FeePriority,
+                label: "High",
+                description: "Next block - faster, higher fee",
+              },
             ] as { p: FeePriority; label: string; description: string }[]
           ).map(({ p, label, description }) => (
             <div
@@ -217,7 +234,9 @@ export function SettingsPage() {
               />
               <div>
                 <p className="text-sm font-medium">{label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {description}
+                </p>
               </div>
             </div>
           ))}
@@ -243,32 +262,6 @@ export function SettingsPage() {
                 {v === 0 ? "0" : `+${v}`}
               </Button>
             ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Posting</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex items-center gap-3 py-2">
-            <Checkbox
-              id="show-explainer"
-              checked={showExplainer}
-              onCheckedChange={(v) => {
-                const show = v === true;
-                setShowExplainerState(show);
-                if (show) {
-                  localStorage.removeItem("ors_hide_posting_explainer");
-                } else {
-                  localStorage.setItem("ors_hide_posting_explainer", "true");
-                }
-              }}
-            />
-            <Label htmlFor="show-explainer" className="text-sm cursor-pointer">
-              Show paid vs free explainer before posting
-            </Label>
           </div>
         </CardContent>
       </Card>
@@ -325,43 +318,85 @@ export function SettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {donationAddress && (
+      {(donationAddress || donationAddressTestnet4) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Support</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
-            <p className="text-xs text-muted-foreground mb-3">
+          <CardContent className="pt-0 space-y-4">
+            <p className="text-xs text-muted-foreground">
               Help keep the facilitator running by donating bitcoin on-chain.
             </p>
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm font-mono text-muted-foreground truncate">
-                {donationAddress}
-              </p>
-              <div className="flex gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    navigator.clipboard.writeText(donationAddress);
-                    toast.success("Copied!");
-                  }}
-                >
-                  <Copy className="h-3.5 w-3.5 mr-1.5" />
-                  Copy
-                </Button>
-                <a
-                  href={`https://mempool.space/address/${donationAddress}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline" size="sm">
-                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                    View
-                  </Button>
-                </a>
+            {donationAddress && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Mainnet
+                </p>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-sm font-mono text-muted-foreground truncate">
+                    {donationAddress}
+                  </p>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(donationAddress);
+                        toast.success("Copied!");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />
+                      Copy
+                    </Button>
+                    <a
+                      href={`https://mempool.space/address/${donationAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm">
+                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                        View
+                      </Button>
+                    </a>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+            {donationAddressTestnet4 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Testnet4
+                </p>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-sm font-mono text-muted-foreground truncate">
+                    {donationAddressTestnet4}
+                  </p>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(donationAddressTestnet4);
+                        toast.success("Copied!");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />
+                      Copy
+                    </Button>
+                    <a
+                      href={`https://mempool.space/testnet4/address/${donationAddressTestnet4}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm">
+                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                        View
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
