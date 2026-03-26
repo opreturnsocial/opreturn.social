@@ -86,7 +86,11 @@ export function createServer() {
       }
     }
 
-    const page = merged.slice(offset, offset + limit);
+    // Deduplicate: if the same sig exists on both networks, keep only the mainnet version
+    const mainnetSigs = new Set(mainnetPosts.map((p) => p.sig));
+    const deduped = merged.filter((p) => p.network === "mainnet" || !mainnetSigs.has(p.sig));
+
+    const page = deduped.slice(offset, offset + limit);
 
     const result: (StoredPost & { network: string })[] = page.map((p) => ({
       txid: p.txid,
@@ -135,7 +139,10 @@ export function createServer() {
       where: { parentTxid: req.params.txid, kind: KIND_TEXT_REPLY, status: { not: "evicted" } },
       orderBy: [{ network: "asc" }, { blockHeight: "asc" }, { txid: "asc" }],
     });
-    const result: (StoredPost & { network: string })[] = replies.map((p) => ({
+    // Deduplicate: keep mainnet version when same sig exists on both networks
+    const repliesMainnetSigs = new Set(replies.filter((r) => r.network === "mainnet").map((r) => r.sig));
+    const dedupedReplies = replies.filter((r) => r.network === "mainnet" || !repliesMainnetSigs.has(r.sig));
+    const result: (StoredPost & { network: string })[] = dedupedReplies.map((p) => ({
       txid: p.txid,
       network: p.network,
       blockHeight: p.blockHeight,
@@ -396,8 +403,25 @@ export function createServer() {
       }),
     ]);
 
+    // Deduplicate follows: mainnet wins when same follower+followee exists on both networks
+    const followsMap = new Map<string, typeof follows[0]>();
+    for (const f of follows) {
+      const key = `${f.followerPubkey}:${f.followeePubkey}`;
+      const existing = followsMap.get(key);
+      if (!existing || f.network === "mainnet") followsMap.set(key, f);
+    }
+    const dedupedFollows = Array.from(followsMap.values());
+
+    // Deduplicate profile updates: mainnet wins when same sig exists on both networks
+    const profileUpdatesMap = new Map<string, typeof profileUpdates[0]>();
+    for (const e of profileUpdates) {
+      const existing = profileUpdatesMap.get(e.sig);
+      if (!existing || e.network === "mainnet") profileUpdatesMap.set(e.sig, e);
+    }
+    const dedupedProfileUpdates = Array.from(profileUpdatesMap.values());
+
     const rawItems: Omit<StoredActivityItem, "replyCount" | "repostCount">[] = [
-      ...follows.map((f) => ({
+      ...dedupedFollows.map((f) => ({
         type: (f.isFollow ? "follow" : "unfollow") as "follow" | "unfollow",
         txid: f.txid,
         network: f.network,
@@ -407,7 +431,7 @@ export function createServer() {
         status: f.status,
         targetPubkey: f.followeePubkey,
       })),
-      ...profileUpdates.map((e) => ({
+      ...dedupedProfileUpdates.map((e) => ({
         type: "profile_update" as const,
         txid: e.txid,
         network: e.network,
