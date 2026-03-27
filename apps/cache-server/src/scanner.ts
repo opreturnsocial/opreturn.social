@@ -48,7 +48,9 @@ function extractPayloadFromScript(hex: string): Buffer | null {
 }
 
 async function getOrCreateScannerState(network: string): Promise<number> {
-  const startBlock = parseInt(process.env.START_BLOCK ?? "0", 10) || 0;
+  const startBlockEnv =
+    network === "testnet4" ? process.env.TESTNET4_START_BLOCK : process.env.START_BLOCK;
+  const startBlock = parseInt(startBlockEnv ?? "0", 10) || 0;
   const state = await prisma.scannerState.upsert({
     where: { network },
     create: { network, lastBlock: startBlock },
