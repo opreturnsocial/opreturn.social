@@ -39,7 +39,7 @@ export function HomePage({
     tab === "following" && loggedInPubkey
       ? { viewer: loggedInPubkey }
       : undefined;
-  const { items, loading, error, refresh, loadMore, loadingMore, hasMore } = useFeed(filter);
+  const { items, parentPosts, parentActivities, loading, error, refresh, loadMore, loadingMore, hasMore } = useFeed(filter);
 
   function handleContentChange(value: string) {
     setContent(value);
@@ -58,6 +58,8 @@ export function HomePage({
   const feed = (
     <Feed
       items={items}
+      parentPosts={parentPosts}
+      parentActivities={parentActivities}
       loading={loading}
       error={error}
       profiles={profiles}

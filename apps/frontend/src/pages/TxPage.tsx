@@ -51,6 +51,7 @@ export function TxPage({
   const { txid } = useParams<{ txid: string }>();
   const navigate = useNavigate();
   const [post, setPost] = useState<Post | null>(null);
+  const [parentPost, setParentPost] = useState<Post | null>(null);
   const [activity, setActivity] = useState<ActivityItem | null>(null);
   const [replies, setReplies] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,9 +66,15 @@ export function TxPage({
         fetchActivityItem(txid),
         fetchReplies(txid),
       ]);
-      if (postRes.status === "fulfilled") setPost(postRes.value);
-      else if (activityRes.status === "fulfilled")
+      if (postRes.status === "fulfilled") {
+        const p = postRes.value;
+        setPost(p);
+        if (p.parentTxid) {
+          fetchPost(p.parentTxid).then(setParentPost).catch(() => {});
+        }
+      } else if (activityRes.status === "fulfilled") {
         setActivity(activityRes.value);
+      }
       if (repliesRes.status === "fulfilled") setReplies(repliesRes.value);
     } catch {
       // ignore polling errors
@@ -175,15 +182,17 @@ export function TxPage({
           post={post}
           profile={profiles[post.pubkey]}
           parentPost={
-            post.parentTxid ? (postsById[post.parentTxid] ?? null) : null
+            post.parentTxid
+              ? (postsById[post.parentTxid] ?? parentPost ?? null)
+              : null
           }
           parentProfile={
             post.parentTxid
-              ? profiles[postsById[post.parentTxid]?.pubkey ?? ""]
+              ? profiles[(postsById[post.parentTxid] ?? parentPost)?.pubkey ?? ""]
               : undefined
           }
           parentActivity={
-            post.parentTxid && !postsById[post.parentTxid]
+            post.parentTxid && !postsById[post.parentTxid] && !parentPost
               ? (activityById[post.parentTxid] ?? null)
               : null
           }

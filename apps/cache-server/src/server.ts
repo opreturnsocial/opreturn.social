@@ -454,7 +454,52 @@ export function createServer() {
     const counts = await getCountsForTxids(txids);
     const items = page.map((i) => ({ ...i.data, ...(counts[i.txid] ?? { replyCount: 0, repostCount: 0 }) }));
 
-    res.json({ items });
+    // Collect parentTxids from posts on this page that aren't already in the page
+    const pageTxids = new Set(page.map((i) => i.txid));
+    const missingParentTxids = [...new Set(
+      page
+        .filter((i) => i.feedType === "post" && (i.data as { parentTxid?: string }).parentTxid)
+        .map((i) => (i.data as { parentTxid: string }).parentTxid)
+        .filter((txid) => !pageTxids.has(txid))
+    )];
+
+    let parentPosts: object[] = [];
+    let parentActivities: object[] = [];
+
+    if (missingParentTxids.length > 0) {
+      // txids are chain-specific (determined by UTXOs), so no dedup needed across networks
+      const [rawPosts, rawFollows, rawProfileUpdates] = await Promise.all([
+        prisma.post.findMany({ where: { txid: { in: missingParentTxids } } }),
+        prisma.follow.findMany({ where: { txid: { in: missingParentTxids } } }),
+        prisma.profileUpdateEvent.findMany({ where: { txid: { in: missingParentTxids } } }),
+      ]);
+
+      parentPosts = rawPosts.map((p) => ({
+        feedType: "post",
+        txid: p.txid, network: p.network, blockHeight: p.blockHeight, timestamp: p.timestamp,
+        content: p.content, kind: p.kind, pubkey: p.pubkey, sig: p.sig,
+        parentTxid: p.parentTxid, status: p.status,
+      }));
+
+      parentActivities = [
+        ...rawFollows.map((f) => ({
+          feedType: "activity",
+          type: f.isFollow ? "follow" : "unfollow",
+          txid: f.txid, network: f.network, pubkey: f.followerPubkey,
+          timestamp: f.timestamp, blockHeight: f.blockHeight, status: f.status,
+          targetPubkey: f.followeePubkey,
+        })),
+        ...rawProfileUpdates.map((e) => ({
+          feedType: "activity",
+          type: "profile_update",
+          txid: e.txid, network: e.network, pubkey: e.pubkey,
+          timestamp: e.timestamp, blockHeight: e.blockHeight, status: e.status,
+          propertyKind: e.propertyKind, value: e.value,
+        })),
+      ];
+    }
+
+    res.json({ items, parentPosts, parentActivities });
   });
 
   app.get("/activity/:txid", async (req, res) => {

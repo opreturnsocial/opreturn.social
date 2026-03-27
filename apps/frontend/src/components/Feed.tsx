@@ -11,6 +11,8 @@ import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 
 interface FeedProps {
   items: FeedItem[];
+  parentPosts?: Record<string, Post>;
+  parentActivities?: Record<string, ActivityItem>;
   loading: boolean;
   error: string | null;
   profiles: Record<string, Profile>;
@@ -43,6 +45,8 @@ function PostSkeleton() {
 
 export function Feed({
   items,
+  parentPosts,
+  parentActivities,
   loading,
   error,
   profiles,
@@ -81,8 +85,8 @@ export function Feed({
       </div>
     );
   } else {
-    const postsById: Record<string, Post> = {};
-    const activityById: Record<string, ActivityItem> = {};
+    const postsById: Record<string, Post> = { ...(parentPosts ?? {}) };
+    const activityById: Record<string, ActivityItem> = { ...(parentActivities ?? {}) };
     for (const item of items) {
       if (item.feedType === "post") postsById[item.txid] = item;
       else activityById[item.txid] = item;

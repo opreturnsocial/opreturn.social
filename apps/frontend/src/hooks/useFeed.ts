@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { schnorr } from "@noble/curves/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";
-import type { Post, FeedItem } from "../types";
+import type { Post, ActivityItem, FeedItem } from "../types";
 import { fetchFeed } from "../api/cache";
 import {
   buildUnsignedPayload,
@@ -56,6 +56,8 @@ export function useFeed(filter?: { pubkey?: string; viewer?: string }) {
   const filterKey = JSON.stringify(filter ?? {});
 
   const [items, setItems] = useState<FeedItem[]>([]);
+  const [parentPosts, setParentPosts] = useState<Record<string, Post>>({});
+  const [parentActivities, setParentActivities] = useState<Record<string, ActivityItem>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -69,6 +71,8 @@ export function useFeed(filter?: { pubkey?: string; viewer?: string }) {
   // Reset when filter changes (tab switch or navigation)
   useEffect(() => {
     setItems([]);
+    setParentPosts({});
+    setParentActivities({});
     setLoading(true);
     setHasMore(true);
     setError(null);
@@ -80,7 +84,7 @@ export function useFeed(filter?: { pubkey?: string; viewer?: string }) {
 
   const refresh = useCallback(async () => {
     try {
-      const data = await fetchFeed(PAGE_SIZE, 0, filter);
+      const { items: data, parentPosts: pp, parentActivities: pa } = await fetchFeed(PAGE_SIZE, 0, filter);
       const verified = data.filter(verifyItem);
       setItems((prev) => {
         // Merge: keep fresh top page + any tail pages already loaded
@@ -88,6 +92,8 @@ export function useFeed(filter?: { pubkey?: string; viewer?: string }) {
         const tail = prev.filter((i) => !freshTxids.has(i.txid));
         return [...verified, ...tail];
       });
+      setParentPosts((prev) => ({ ...prev, ...Object.fromEntries(pp.map((p) => [p.txid, p])) }));
+      setParentActivities((prev) => ({ ...prev, ...Object.fromEntries(pa.map((a) => [a.txid, a])) }));
       setError(null);
     } catch (err) {
       setError((err as Error).message);
@@ -104,7 +110,7 @@ export function useFeed(filter?: { pubkey?: string; viewer?: string }) {
     setLoadingMore(true);
     try {
       const offset = offsetRef.current;
-      const data = await fetchFeed(PAGE_SIZE, offset, filter);
+      const { items: data, parentPosts: pp, parentActivities: pa } = await fetchFeed(PAGE_SIZE, offset, filter);
       if (data.length < PAGE_SIZE) {
         hasMoreRef.current = false;
         setHasMore(false);
@@ -119,6 +125,8 @@ export function useFeed(filter?: { pubkey?: string; viewer?: string }) {
             ...verified.filter((i) => !existingTxids.has(i.txid)),
           ];
         });
+        setParentPosts((prev) => ({ ...Object.fromEntries(pp.map((p) => [p.txid, p])), ...prev }));
+        setParentActivities((prev) => ({ ...Object.fromEntries(pa.map((a) => [a.txid, a])), ...prev }));
       } else if (data.length === 0) {
         hasMoreRef.current = false;
         setHasMore(false);
@@ -138,5 +146,5 @@ export function useFeed(filter?: { pubkey?: string; viewer?: string }) {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  return { items, loading, loadingMore, hasMore, error, refresh, loadMore };
+  return { items, parentPosts, parentActivities, loading, loadingMore, hasMore, error, refresh, loadMore };
 }

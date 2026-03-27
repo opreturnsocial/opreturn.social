@@ -66,13 +66,14 @@ export async function fetchFeed(
   limit = 20,
   offset = 0,
   filter?: { pubkey?: string; viewer?: string },
-): Promise<FeedItem[]> {
+): Promise<{ items: FeedItem[]; parentPosts: Post[]; parentActivities: ActivityItem[] }> {
   let url = `${BASE_URL}/feed?limit=${limit}&offset=${offset}`;
   if (filter?.pubkey) url += `&pubkey=${encodeURIComponent(filter.pubkey)}`;
   if (filter?.viewer) url += `&viewer=${encodeURIComponent(filter.viewer)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
-  return (await res.json() as { items: FeedItem[] }).items;
+  const data = await res.json() as { items: FeedItem[]; parentPosts?: Post[]; parentActivities?: ActivityItem[] };
+  return { items: data.items, parentPosts: data.parentPosts ?? [], parentActivities: data.parentActivities ?? [] };
 }
 
 export async function fetchOgLeaderboard(): Promise<{ pubkey: string; rank: number; firstTimestamp: number }[]> {

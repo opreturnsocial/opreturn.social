@@ -84,12 +84,15 @@ export function ProfilePage({
   const { pubkey } = useParams<{ pubkey: string }>();
   const navigate = useNavigate();
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [parentPosts, setParentPosts] = useState<Record<string, Post>>({});
+  const [parentActivities, setParentActivities] = useState<Record<string, ActivityItem>>({});
   const posts = feedItems.flatMap((i) => (i.feedType === "post" ? [i as Post] : []));
   const profileActivity = feedItems.flatMap((i) => (i.feedType === "activity" ? [i as ActivityItem] : []));
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(20);
+  const loadingRef = useRef(true);
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
   const [followingPubkeys, setFollowingPubkeys] = useState<string[]>([]);
@@ -133,16 +136,19 @@ export function ProfilePage({
     // Reset pagination state on (re)load
     offsetRef.current = 20;
     hasMoreRef.current = true;
+    loadingRef.current = true;
     setHasMore(true);
     try {
-      const [data, followsData, followers, ogData] =
+      const [feedData, followsData, followers, ogData] =
         await Promise.all([
           fetchFeed(20, 0, { pubkey }),
           fetchFollows(pubkey),
           fetchFollowers(pubkey),
           fetchOgLeaderboard(),
         ]);
-      setFeedItems(data);
+      setFeedItems(feedData.items);
+      setParentPosts(Object.fromEntries(feedData.parentPosts.map((p) => [p.txid, p])));
+      setParentActivities(Object.fromEntries(feedData.parentActivities.map((a) => [a.txid, a])));
       setFollowingPubkeys([
         ...followsData.pubkeys,
         ...followsData.pendingPubkeys,
@@ -158,6 +164,7 @@ export function ProfilePage({
     } catch {
       // ignore
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }, [pubkey]);
@@ -167,12 +174,12 @@ export function ProfilePage({
   }, [load]);
 
   const loadMorePosts = useCallback(async () => {
-    if (!pubkey || loadingMoreRef.current || !hasMoreRef.current) return;
+    if (!pubkey || loadingRef.current || loadingMoreRef.current || !hasMoreRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const offset = offsetRef.current;
-      const data = await fetchFeed(20, offset, { pubkey });
+      const { items: data, parentPosts: pp, parentActivities: pa } = await fetchFeed(20, offset, { pubkey });
       if (data.length < 20) {
         hasMoreRef.current = false;
         setHasMore(false);
@@ -183,6 +190,8 @@ export function ProfilePage({
           const existingTxids = new Set(prev.map((i) => i.txid));
           return [...prev, ...data.filter((i) => !existingTxids.has(i.txid))];
         });
+        setParentPosts((prev) => ({ ...Object.fromEntries(pp.map((p) => [p.txid, p])), ...prev }));
+        setParentActivities((prev) => ({ ...Object.fromEntries(pa.map((a) => [a.txid, a])), ...prev }));
       } else {
         hasMoreRef.current = false;
         setHasMore(false);
@@ -435,8 +444,8 @@ export function ProfilePage({
         <div className="space-y-3">
           {(() => {
             // postsById uses both global context and profile-specific items for parent post lookup
-            const postsById: Record<string, Post> = {};
-            const activityById: Record<string, ActivityItem> = {};
+            const postsById: Record<string, Post> = { ...parentPosts };
+            const activityById: Record<string, ActivityItem> = { ...parentActivities };
             for (const a of allActivityItems ?? []) activityById[a.txid] = a;
             for (const p of allPosts) postsById[p.txid] = p;
             for (const p of posts) postsById[p.txid] = p;
