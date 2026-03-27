@@ -258,11 +258,11 @@ Add DNS A records (or CNAME to your existing domain) for:
 cd /opt/opreturn.social
 git pull
 yarn install
-yarn build:protocol
-yarn build
 # If schema changed:
 (cd apps/cache-server && yarn db:migrate:prod && yarn db:generate)
 (cd apps/facilitator && yarn db:migrate:prod && yarn db:generate)
+# rebuild
+yarn build
 sudo systemctl restart ors-cache ors-facilitator
 ```
 
