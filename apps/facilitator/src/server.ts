@@ -31,7 +31,6 @@ import {
   unlockInputs,
   getWalletBalance,
   getRpc,
-  testnet4Rpc,
 } from "./rpc.js";
 import { prisma } from "./db.js";
 
@@ -46,10 +45,13 @@ const FORCE_FEE_RATE_MEDIUM_SAT_PER_VBYTE = process.env.FORCE_FEE_RATE_MEDIUM_SA
 
 // Fee rate caps to protect the facilitator's wallets
 const MAX_FEE_RATE_MAINNET_SAT_VBYTE = Number(process.env.MAX_FEE_RATE_MAINNET_SAT_VBYTE ?? "10");
-const MAX_FEE_RATE_TESTNET4_SAT_VBYTE = Number(process.env.MAX_FEE_RATE_TESTNET4_SAT_VBYTE ?? "2");
+const MAX_FEE_RATE_FREE_NETWORK_SAT_VBYTE = Number(process.env.MAX_FEE_RATE_FREE_NETWORK_SAT_VBYTE ?? "2");
 
-// Testnet4 rate limit: max actions per pubkey per rolling hour
-const TESTNET4_RATE_LIMIT = Number(process.env.TESTNET4_RATE_LIMIT ?? "20");
+// Free network config
+const FREE_NETWORK = process.env.FREE_NETWORK ?? "mutinynet";
+
+// Free network rate limit: max actions per pubkey per rolling hour
+const FREE_NETWORK_RATE_LIMIT = Number(process.env.FREE_NETWORK_RATE_LIMIT ?? "20");
 
 function calcInvoiceSats(feeSats: number): number {
   return Math.ceil(feeSats * (1 + FEE_MARKUP_PERCENT / 100));
@@ -184,7 +186,7 @@ async function handleAction(
   }
 }
 
-// Checks mainnet-activity gate for testnet4 requests.
+// Checks mainnet-activity gate for free network requests.
 // Returns true if allowed, false (and sends 403) if blocked.
 async function checkMainnetGate(pubkey: string, res: express.Response): Promise<boolean> {
   const resp = await fetch(`${CACHE_SERVER_URL}/pubkey/${pubkey}/mainnet-active`);
@@ -195,28 +197,28 @@ async function checkMainnetGate(pubkey: string, res: express.Response): Promise<
   }
   const { active } = (await resp.json()) as { active: boolean };
   if (!active) {
-    res.status(403).json({ error: "Post on mainnet at least once to unlock free testnet4 posting." });
+    res.status(403).json({ error: "Post on mainnet at least once to unlock free posting." });
     return false;
   }
   return true;
 }
 
-// Rate limit check: max TESTNET4_RATE_LIMIT testnet4 actions per pubkey per rolling hour.
+// Rate limit check: max FREE_NETWORK_RATE_LIMIT free actions per pubkey per rolling hour.
 // Uses PendingBroadcast records directly.
-async function checkTestnet4RateLimit(pubkey: string, res: express.Response): Promise<boolean> {
+async function checkFreeNetworkRateLimit(pubkey: string, res: express.Response): Promise<boolean> {
   const since = new Date(Date.now() - 60 * 60 * 1000);
   const count = await prisma.pendingBroadcast.count({
-    where: { pubkey, network: "testnet4", createdAt: { gte: since } },
+    where: { pubkey, network: FREE_NETWORK, createdAt: { gte: since } },
   });
-  if (count >= TESTNET4_RATE_LIMIT) {
-    res.status(429).json({ error: `Testnet4 rate limit exceeded (${TESTNET4_RATE_LIMIT} actions per hour). Try again later.` });
+  if (count >= FREE_NETWORK_RATE_LIMIT) {
+    res.status(429).json({ error: `Free network rate limit exceeded (${FREE_NETWORK_RATE_LIMIT} actions per hour). Try again later.` });
     return false;
   }
   return true;
 }
 
-// Broadcasts a testnet4 TX directly (no Lightning payment required).
-async function broadcastTestnet4(
+// Broadcasts a free network TX directly (no Lightning payment required).
+async function broadcastFreeNetwork(
   action: string,
   pubkey: string,
   payloadHex: string,
@@ -224,7 +226,7 @@ async function broadcastTestnet4(
   feeRateBtcPerKb: number,
   requestBody: object,
 ): Promise<{ txid: string }> {
-  const rpc = getRpc("testnet4");
+  const rpc = getRpc(FREE_NETWORK);
 
   const broadcast = async () => {
     if (!chunksJson) {
@@ -267,12 +269,12 @@ async function broadcastTestnet4(
     }
   };
 
-  const txid = await serialisedTestnet4Broadcast(broadcast);
+  const txid = await serialisedFreeNetworkBroadcast(broadcast);
 
   // Record in PendingBroadcast (already broadcast)
   await prisma.pendingBroadcast.create({
     data: {
-      paymentHash: `testnet4-${txid}`,
+      paymentHash: `${FREE_NETWORK}-${txid}`,
       preimage: "",
       invoice: "",
       payloadHex: payloadHex,
@@ -286,21 +288,21 @@ async function broadcastTestnet4(
       expiresAt: new Date(),
       action,
       requestJson: JSON.stringify(requestBody),
-      network: "testnet4",
+      network: FREE_NETWORK,
       pubkey,
     },
   });
 
-  // Notify cache server (mark as pending on testnet4)
-  notifyCache(action, JSON.stringify(requestBody), txid, "testnet4").catch((e) =>
-    console.error("[facilitator] notify cache (testnet4) error:", e)
+  // Notify cache server
+  notifyCache(action, JSON.stringify(requestBody), txid, FREE_NETWORK).catch((e) =>
+    console.error(`[facilitator] notify cache (${FREE_NETWORK}) error:`, e)
   );
 
-  console.log(`[facilitator] testnet4 broadcast txid: ${txid}`);
+  console.log(`[facilitator] ${FREE_NETWORK} broadcast txid: ${txid}`);
   return { txid };
 }
 
-async function handleTestnet4Action(
+async function handleFreeNetworkAction(
   action: string,
   pubkey: string,
   feeBumpSatPerVByte: number,
@@ -310,10 +312,10 @@ async function handleTestnet4Action(
 ): Promise<void> {
   try {
     // Rate limit
-    if (!(await checkTestnet4RateLimit(pubkey, res))) return;
+    if (!(await checkFreeNetworkRateLimit(pubkey, res))) return;
 
-    // Fee rate cap for testnet4
-    const feeRateSatPerVByte = Math.min(feeBumpSatPerVByte > 0 ? feeBumpSatPerVByte : 1, MAX_FEE_RATE_TESTNET4_SAT_VBYTE);
+    // Fee rate cap for free network
+    const feeRateSatPerVByte = Math.min(feeBumpSatPerVByte > 0 ? feeBumpSatPerVByte : 1, MAX_FEE_RATE_FREE_NETWORK_SAT_VBYTE);
     const feeRateBtcPerKb = feeRateSatPerVByte / 1e5;
 
     const chunks = buildV1();
@@ -323,10 +325,10 @@ async function handleTestnet4Action(
     }
     const chunksJson = chunks.length > 0 ? JSON.stringify(chunks) : undefined;
 
-    const { txid } = await broadcastTestnet4(action, pubkey, "", chunksJson, feeRateBtcPerKb, requestBody);
+    const { txid } = await broadcastFreeNetwork(action, pubkey, "", chunksJson, feeRateBtcPerKb, requestBody);
     res.json({ ok: true, txid });
   } catch (err) {
-    console.error(`[facilitator] testnet4 ${action} error:`, err);
+    console.error(`[facilitator] ${FREE_NETWORK} ${action} error:`, err);
     res.status(500).json({ error: (err as Error).message });
   }
 }
@@ -339,10 +341,10 @@ function serialisedBroadcast<T>(fn: () => Promise<T>): Promise<T> {
   return result;
 }
 
-let testnet4BroadcastQueue = Promise.resolve<unknown>(undefined);
-function serialisedTestnet4Broadcast<T>(fn: () => Promise<T>): Promise<T> {
-  const result = testnet4BroadcastQueue.then(() => fn());
-  testnet4BroadcastQueue = result.then(() => {}, () => {});
+let freeNetworkBroadcastQueue = Promise.resolve<unknown>(undefined);
+function serialisedFreeNetworkBroadcast<T>(fn: () => Promise<T>): Promise<T> {
+  const result = freeNetworkBroadcastQueue.then(() => fn());
+  freeNetworkBroadcastQueue = result.then(() => {}, () => {});
   return result;
 }
 
@@ -523,64 +525,70 @@ export function createServer() {
     res.json({ broadcast: pending.broadcast, txid: pending.txid ?? null });
   });
 
-  // --- Testnet4 endpoints (free, no Lightning required) ---
+  // --- Free network endpoints (no Lightning required) ---
 
-  app.post("/testnet4/post", async (req, res) => {
+  app.post("/free/post", async (req, res) => {
     const { content, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
       content?: string; pubkey?: string; sig?: string; protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     if (!content || !pubkey || !sig) { res.status(400).json({ error: "content, pubkey, and sig are required" }); return; }
-    await handleTestnet4Action("post", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
+    if (!(await checkMainnetGate(pubkey, res))) return;
+    await handleFreeNetworkAction("post", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadV1(content, pubkey, sig),
       { content, pubkey, sig, protocolVersion: pv ?? 1 }, res);
   });
 
-  app.post("/testnet4/reply", async (req, res) => {
+  app.post("/free/reply", async (req, res) => {
     const { content, pubkey, sig, parentTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
       content?: string; pubkey?: string; sig?: string; parentTxid?: string; protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     if (!content || !pubkey || !sig || !parentTxid) { res.status(400).json({ error: "content, pubkey, sig, and parentTxid are required" }); return; }
-    await handleTestnet4Action("reply", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
+    if (!(await checkMainnetGate(pubkey, res))) return;
+    await handleFreeNetworkAction("reply", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadReplyV1(content, pubkey, sig, parentTxid),
       { content, pubkey, sig, parentTxid, protocolVersion: pv ?? 1 }, res);
   });
 
-  app.post("/testnet4/repost", async (req, res) => {
+  app.post("/free/repost", async (req, res) => {
     const { pubkey, sig, referencedTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
       pubkey?: string; sig?: string; referencedTxid?: string; protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     if (!pubkey || !sig || !referencedTxid) { res.status(400).json({ error: "pubkey, sig, and referencedTxid are required" }); return; }
-    await handleTestnet4Action("repost", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
+    if (!(await checkMainnetGate(pubkey, res))) return;
+    await handleFreeNetworkAction("repost", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadRepostV1(pubkey, sig, referencedTxid),
       { pubkey, sig, referencedTxid, protocolVersion: pv ?? 1 }, res);
   });
 
-  app.post("/testnet4/quote-repost", async (req, res) => {
+  app.post("/free/quote-repost", async (req, res) => {
     const { content, pubkey, sig, referencedTxid, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
       content?: string; pubkey?: string; sig?: string; referencedTxid?: string; protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     if (!content || !pubkey || !sig || !referencedTxid) { res.status(400).json({ error: "content, pubkey, sig, and referencedTxid are required" }); return; }
-    await handleTestnet4Action("quote-repost", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
+    if (!(await checkMainnetGate(pubkey, res))) return;
+    await handleFreeNetworkAction("quote-repost", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadQuoteRepostV1(content, pubkey, sig, referencedTxid),
       { content, pubkey, sig, referencedTxid, protocolVersion: pv ?? 1 }, res);
   });
 
-  app.post("/testnet4/follow", async (req, res) => {
+  app.post("/free/follow", async (req, res) => {
     const { targetPubkey, isFollow, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
       targetPubkey?: string; isFollow?: boolean; pubkey?: string; sig?: string; protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     if (!targetPubkey || typeof isFollow !== "boolean" || !pubkey || !sig) { res.status(400).json({ error: "targetPubkey, isFollow, pubkey, and sig are required" }); return; }
-    await handleTestnet4Action("follow", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
+    if (!(await checkMainnetGate(pubkey, res))) return;
+    await handleFreeNetworkAction("follow", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadFollowV1(targetPubkey, isFollow, pubkey, sig),
       { targetPubkey, isFollow, pubkey, sig, protocolVersion: pv ?? 1 }, res);
   });
 
-  app.post("/testnet4/profile", async (req, res) => {
+  app.post("/free/profile", async (req, res) => {
     const { propertyKind, value, pubkey, sig, protocolVersion: pv, feeBumpSatPerVByte: fbRaw } = req.body as {
       propertyKind?: number; value?: string; pubkey?: string; sig?: string; protocolVersion?: number; feeBumpSatPerVByte?: number;
     };
     if (typeof propertyKind !== "number" || !value || !pubkey || !sig) { res.status(400).json({ error: "propertyKind, value, pubkey, and sig are required" }); return; }
-    await handleTestnet4Action("profile", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
+    if (!(await checkMainnetGate(pubkey, res))) return;
+    await handleFreeNetworkAction("profile", pubkey, typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadProfileV1(propertyKind, value, pubkey, sig),
       { propertyKind, value, pubkey, sig, protocolVersion: pv ?? 1 }, res);
   });

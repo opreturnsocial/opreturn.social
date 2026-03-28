@@ -100,18 +100,18 @@ export const mainnetRpc = makeRpcClient({
   wallet: process.env.BITCOIN_RPC_WALLET ?? "",
 });
 
-export const testnet4Rpc = makeRpcClient({
-  host: process.env.TESTNET4_BITCOIN_RPC_HOST ?? "127.0.0.1",
-  port: process.env.TESTNET4_BITCOIN_RPC_PORT ?? "18444",
-  user: process.env.TESTNET4_BITCOIN_RPC_USER ?? "polaruser",
-  pass: process.env.TESTNET4_BITCOIN_RPC_PASS ?? "polarpass",
-  wallet: process.env.TESTNET4_BITCOIN_RPC_WALLET ?? "",
+export const freeNetworkRpc = makeRpcClient({
+  host: process.env.FREE_NETWORK_BITCOIN_RPC_HOST ?? "127.0.0.1",
+  port: process.env.FREE_NETWORK_BITCOIN_RPC_PORT ?? "18444",
+  user: process.env.FREE_NETWORK_BITCOIN_RPC_USER ?? "polaruser",
+  pass: process.env.FREE_NETWORK_BITCOIN_RPC_PASS ?? "polarpass",
+  wallet: process.env.FREE_NETWORK_BITCOIN_RPC_WALLET ?? "",
 });
 
 export type RpcClient = ReturnType<typeof makeRpcClient>;
 
-export function getRpc(network: "mainnet" | "testnet4"): RpcClient {
-  return network === "testnet4" ? testnet4Rpc : mainnetRpc;
+export function getRpc(network: string): RpcClient {
+  return network === "mainnet" ? mainnetRpc : freeNetworkRpc;
 }
 
 // Re-export mainnet functions for backward compat with existing broadcast code

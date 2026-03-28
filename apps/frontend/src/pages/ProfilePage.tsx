@@ -3,7 +3,7 @@ import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { BoxIcon, Clock, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
-import { mempoolTxUrl } from "@/lib/utils";
+import { mempoolTxUrl, isFreeNetwork, FREE_NETWORK } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -236,7 +236,7 @@ export function ProfilePage({
       setPendingFollowerPubkeys(new Set(followers.pendingPubkeys));
       setFollowerInfo(new Map(followers.follows.map((f) => [f.pubkey, f])));
       toast.success(newIsFollow ? "Followed!" : "Unfollowed!", {
-        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, "testnet4"), "_blank") },
+        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, FREE_NETWORK), "_blank") },
       });
     } catch (err) {
       toast.error((err as Error).message ?? "Failed");
@@ -389,7 +389,7 @@ export function ProfilePage({
                           <span className="font-medium">
                             {FIELD_NAMES[kind] ?? `Field ${kind}`}
                           </span>
-                          {item.network !== "testnet4" && (
+                          {!isFreeNetwork(item.network) && (
                             <span title="On-chain bitcoin transaction"><BoxIcon className="w-3 h-3 text-orange-500 shrink-0" /></span>
                           )}
                         </span>
@@ -401,7 +401,7 @@ export function ProfilePage({
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <TxidDropdownItem txid={item.txid} network={item.network}>
-                        {item.network === "testnet4" && loggedInPubkey === pubkey && (
+                        {isFreeNetwork(item.network) && loggedInPubkey === pubkey && (
                           <MakePermanentButton
                             actionType="profile"
                             pubkey={loggedInPubkey!}
@@ -675,7 +675,7 @@ export function ProfilePage({
                         <Clock className="h-3 w-3 text-muted-foreground" />
                       </span>
                     )}
-                    {info && !isPending && info.network !== "testnet4" && (
+                    {info && !isPending && !isFreeNetwork(info.network) && (
                       <span title="On-chain bitcoin transaction"><BoxIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" /></span>
                     )}
                     {info && (
@@ -697,7 +697,7 @@ export function ProfilePage({
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
                           <TxidDropdownItem txid={info.txid} network={info.network}>
-                            {info.network === "testnet4" &&
+                            {isFreeNetwork(info.network) &&
                               ((followListModal === "following" && loggedInPubkey === pubkey) ||
                                 (followListModal === "followers" && pk === loggedInPubkey)) && (
                               <MakePermanentButton

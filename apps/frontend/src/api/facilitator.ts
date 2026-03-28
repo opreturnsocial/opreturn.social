@@ -28,7 +28,7 @@ async function postAndGetInvoice(endpoint: string, body: object): Promise<Invoic
 }
 
 async function postFree(endpoint: string, body: object): Promise<FreePostResponse> {
-  const res = await fetch(`${BASE_URL}/testnet4${endpoint}`, {
+  const res = await fetch(`${BASE_URL}/free${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -79,7 +79,7 @@ export async function getStatus(paymentHash: string): Promise<{ broadcast: boole
   return res.json();
 }
 
-// --- Testnet4 (free) ---
+// --- Free network (no Lightning required) ---
 
 export async function submitPostFree(content: string, pubkey: string, sig: string, protocolVersion: number): Promise<FreePostResponse> {
   return postFree("/post", { content, pubkey, sig, protocolVersion });

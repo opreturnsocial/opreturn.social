@@ -4,7 +4,7 @@ import { sha256 } from "@noble/hashes/sha256";
 import { schnorr } from "@noble/curves/secp256k1";
 
 import { toast } from "sonner";
-import { mempoolTxUrl } from "@/lib/utils";
+import { mempoolTxUrl, FREE_NETWORK } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -118,7 +118,7 @@ export function TxPage({
       );
       setReplyText("");
       toast.success("Reply posted!", {
-        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(replyTxid, "testnet4"), "_blank") },
+        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(replyTxid, FREE_NETWORK), "_blank") },
       });
       await load();
     } catch (err) {

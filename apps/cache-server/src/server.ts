@@ -20,6 +20,7 @@ import { rescanFrom } from "./scanner.js";
 import type { StoredPost, StoredProfile, StoredActivityItem } from "./types.js";
 
 const INTERNAL_TOKEN = process.env.CACHE_INTERNAL_TOKEN ?? "";
+const FREE_NETWORK = process.env.FREE_NETWORK ?? "mutinynet";
 
 function requireInternalToken(req: Request, res: Response, next: NextFunction) {
   if (!INTERNAL_TOKEN || req.headers["x-internal-token"] !== INTERNAL_TOKEN) {
@@ -39,7 +40,7 @@ export function createServer() {
   });
 
   // Returns whether a pubkey has at least 1 confirmed mainnet post or profile update.
-  // Used by the facilitator as the testnet4 spam gate.
+  // Used by the facilitator as the free network spam gate.
   app.get("/pubkey/:pubkey/mainnet-active", async (req, res) => {
     const { pubkey } = req.params;
     const [post, profile] = await Promise.all([
@@ -54,41 +55,17 @@ export function createServer() {
     const offset = Number(req.query.offset ?? 0);
     const pubkey = req.query.pubkey as string | undefined;
 
-    // Fetch mainnet and testnet4 posts separately so we can interleave with mainnet priority.
-    // Within each network, order by timestamp DESC. Mainnet posts take precedence at same timestamp.
     const whereBase = pubkey ? { pubkey, status: { not: "evicted" } } : { status: { not: "evicted" } };
 
-    const [mainnetPosts, testnet4Posts] = await Promise.all([
-      prisma.post.findMany({
-        where: { ...whereBase, network: "mainnet" },
-        orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
-        take: limit + offset,
-      }),
-      prisma.post.findMany({
-        where: { ...whereBase, network: "testnet4" },
-        orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
-        take: limit + offset,
-      }),
-    ]);
-
-    // Merge: interleave by timestamp descending, mainnet wins ties
-    const merged: typeof mainnetPosts = [];
-    let mi = 0, ti = 0;
-    while (merged.length < limit + offset && (mi < mainnetPosts.length || ti < testnet4Posts.length)) {
-      const m = mainnetPosts[mi];
-      const t = testnet4Posts[ti];
-      if (!t || (m && m.timestamp >= t.timestamp)) {
-        merged.push(m);
-        mi++;
-      } else {
-        merged.push(t);
-        ti++;
-      }
-    }
+    const posts = await prisma.post.findMany({
+      where: { ...whereBase, network: { in: ["mainnet", FREE_NETWORK] } },
+      orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
+      take: limit + offset,
+    });
 
     // Deduplicate: if the same sig exists on both networks, keep only the mainnet version
-    const mainnetSigs = new Set(mainnetPosts.map((p) => p.sig));
-    const deduped = merged.filter((p) => p.network === "mainnet" || !mainnetSigs.has(p.sig));
+    const mainnetSigs = new Set(posts.filter((p) => p.network === "mainnet").map((p) => p.sig));
+    const deduped = posts.filter((p) => p.network === "mainnet" || !mainnetSigs.has(p.sig));
 
     const page = deduped.slice(offset, offset + limit);
 
@@ -110,10 +87,10 @@ export function createServer() {
 
   app.get("/posts/:txid", async (req, res) => {
     const { txid } = req.params;
-    // Try mainnet first, then testnet4
+    // Try mainnet first, then free network
     const post =
       (await prisma.post.findFirst({ where: { txid, network: "mainnet" } })) ??
-      (await prisma.post.findFirst({ where: { txid, network: "testnet4" } }));
+      (await prisma.post.findFirst({ where: { txid, network: FREE_NETWORK } }));
     if (!post) {
       res.status(404).json({ error: "Not found" });
       return;
@@ -134,9 +111,9 @@ export function createServer() {
   });
 
   app.get("/posts/:txid/replies", async (req, res) => {
-    // Replies can be on any network. Mainnet replies first, then testnet4.
+    // Replies can be on any network. Mainnet replies first, then free network.
     const replies = await prisma.post.findMany({
-      where: { parentTxid: req.params.txid, kind: KIND_TEXT_REPLY, status: { not: "evicted" } },
+      where: { parentTxid: req.params.txid, kind: KIND_TEXT_REPLY, status: { not: "evicted" }, network: { in: ["mainnet", FREE_NETWORK] } },
       orderBy: [{ network: "asc" }, { blockHeight: "asc" }, { txid: "asc" }],
     });
     // Deduplicate: keep mainnet version when same sig exists on both networks
@@ -175,7 +152,7 @@ export function createServer() {
         network?: string;
       };
 
-    const network = (reqNetwork === "testnet4" ? "testnet4" : "mainnet") as string;
+    const network = (reqNetwork === FREE_NETWORK ? FREE_NETWORK : "mainnet") as string;
 
     if (!txid || !pubkey || !sig) {
       res.status(400).json({ error: "Missing required fields" });
@@ -258,7 +235,7 @@ export function createServer() {
 
   app.get("/follows/:pubkey", async (req, res) => {
     const rows = await prisma.follow.findMany({
-      where: { followerPubkey: req.params.pubkey, isFollow: true, status: { not: "evicted" } },
+      where: { followerPubkey: req.params.pubkey, isFollow: true, status: { not: "evicted" }, network: { in: ["mainnet", FREE_NETWORK] } },
     });
     const pubkeys = rows.filter((r) => r.status === "confirmed").map((r) => r.followeePubkey);
     const pendingPubkeys = rows.filter((r) => r.status === "pending").map((r) => r.followeePubkey);
@@ -273,7 +250,7 @@ export function createServer() {
 
   app.get("/followers/:pubkey", async (req, res) => {
     const rows = await prisma.follow.findMany({
-      where: { followeePubkey: req.params.pubkey, isFollow: true, status: { not: "evicted" } },
+      where: { followeePubkey: req.params.pubkey, isFollow: true, status: { not: "evicted" }, network: { in: ["mainnet", FREE_NETWORK] } },
     });
     const pubkeys = rows.filter((r) => r.status === "confirmed").map((r) => r.followerPubkey);
     const pendingPubkeys = rows.filter((r) => r.status === "pending").map((r) => r.followerPubkey);
@@ -287,12 +264,12 @@ export function createServer() {
   });
 
   app.get("/profiles", async (_req, res) => {
-    // Return merged profiles: mainnet wins, fall back to testnet4 for pubkeys with no mainnet profile
-    const allProfiles = await prisma.profile.findMany();
+    // Return merged profiles: mainnet wins, fall back to free network for pubkeys with no mainnet profile
+    const allProfiles = await prisma.profile.findMany({ where: { network: { in: ["mainnet", FREE_NETWORK] } } });
     const byPubkey = new Map<string, typeof allProfiles[0]>();
-    // Process testnet4 first, then mainnet overwrites (mainnet wins)
+    // Process free network first, then mainnet overwrites (mainnet wins)
     for (const p of allProfiles) {
-      if (p.network === "testnet4") {
+      if (p.network !== "mainnet") {
         const existing = byPubkey.get(p.pubkey);
         if (!existing) byPubkey.set(p.pubkey, p);
       }
@@ -315,12 +292,12 @@ export function createServer() {
     const [repliers, reposters] = await Promise.all([
       prisma.post.groupBy({
         by: ["parentTxid"],
-        where: { kind: KIND_TEXT_REPLY, parentTxid: { in: txids } },
+        where: { kind: KIND_TEXT_REPLY, parentTxid: { in: txids }, network: { in: ["mainnet", FREE_NETWORK] } },
         _count: { txid: true },
       }),
       prisma.post.groupBy({
         by: ["parentTxid"],
-        where: { kind: { in: [KIND_REPOST, KIND_QUOTE_REPOST] }, parentTxid: { in: txids } },
+        where: { kind: { in: [KIND_REPOST, KIND_QUOTE_REPOST] }, parentTxid: { in: txids }, network: { in: ["mainnet", FREE_NETWORK] } },
         _count: { txid: true },
       }),
     ]);
@@ -355,7 +332,7 @@ export function createServer() {
 
     if (viewer) {
       const viewerFollows = await prisma.follow.findMany({
-        where: { followerPubkey: viewer, isFollow: true, status: { not: "evicted" } },
+        where: { followerPubkey: viewer, isFollow: true, status: { not: "evicted" }, network: { in: ["mainnet", FREE_NETWORK] } },
         select: { followeePubkey: true },
       });
       filterPubkeys = [...new Set(viewerFollows.map((f) => f.followeePubkey))];
@@ -367,27 +344,26 @@ export function createServer() {
       filterSinglePubkey = pubkey;
     }
 
+    const networkFilter = { network: { in: ["mainnet", FREE_NETWORK] } };
     const postWhere = {
       status: { not: "evicted" as const },
+      ...networkFilter,
       ...(filterPubkeys ? { pubkey: { in: filterPubkeys } } : filterSinglePubkey ? { pubkey: filterSinglePubkey } : {}),
     };
     const followWhere = {
       status: { not: "evicted" as const },
+      ...networkFilter,
       ...(filterPubkeys ? { followerPubkey: { in: filterPubkeys } } : filterSinglePubkey ? { followerPubkey: filterSinglePubkey } : {}),
     };
     const profileUpdateWhere = {
       status: { not: "evicted" as const },
+      ...networkFilter,
       ...(filterPubkeys ? { pubkey: { in: filterPubkeys } } : filterSinglePubkey ? { pubkey: filterSinglePubkey } : {}),
     };
 
-    const [mainnetPosts, testnet4Posts, follows, profileUpdates] = await Promise.all([
+    const [allPosts, follows, profileUpdates] = await Promise.all([
       prisma.post.findMany({
-        where: { ...postWhere, network: "mainnet" },
-        orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
-        take: fetchLimit,
-      }),
-      prisma.post.findMany({
-        where: { ...postWhere, network: "testnet4" },
+        where: postWhere,
         orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
         take: fetchLimit,
       }),
@@ -395,17 +371,9 @@ export function createServer() {
       prisma.profileUpdateEvent.findMany({ where: profileUpdateWhere }),
     ]);
 
-    // Merge + dedup posts (mainnet wins on same sig)
-    const mergedPosts: typeof mainnetPosts = [];
-    let mi = 0, ti = 0;
-    while (mergedPosts.length < fetchLimit && (mi < mainnetPosts.length || ti < testnet4Posts.length)) {
-      const m = mainnetPosts[mi];
-      const t = testnet4Posts[ti];
-      if (!t || (m && m.timestamp >= t.timestamp)) { mergedPosts.push(m); mi++; }
-      else { mergedPosts.push(t); ti++; }
-    }
-    const mainnetPostSigs = new Set(mainnetPosts.map((p) => p.sig));
-    const dedupedPosts = mergedPosts.filter((p) => p.network === "mainnet" || !mainnetPostSigs.has(p.sig));
+    // Deduplicate posts: mainnet wins on same sig
+    const mainnetPostSigs = new Set(allPosts.filter((p) => p.network === "mainnet").map((p) => p.sig));
+    const dedupedPosts = allPosts.filter((p) => p.network === "mainnet" || !mainnetPostSigs.has(p.sig));
 
     // Dedup activity (mainnet wins)
     const followsMap = new Map<string, typeof follows[0]>();
@@ -469,9 +437,9 @@ export function createServer() {
     if (missingParentTxids.length > 0) {
       // txids are chain-specific (determined by UTXOs), so no dedup needed across networks
       const [rawPosts, rawFollows, rawProfileUpdates] = await Promise.all([
-        prisma.post.findMany({ where: { txid: { in: missingParentTxids } } }),
-        prisma.follow.findMany({ where: { txid: { in: missingParentTxids } } }),
-        prisma.profileUpdateEvent.findMany({ where: { txid: { in: missingParentTxids } } }),
+        prisma.post.findMany({ where: { txid: { in: missingParentTxids }, network: { in: ["mainnet", FREE_NETWORK] } } }),
+        prisma.follow.findMany({ where: { txid: { in: missingParentTxids }, network: { in: ["mainnet", FREE_NETWORK] } } }),
+        prisma.profileUpdateEvent.findMany({ where: { txid: { in: missingParentTxids }, network: { in: ["mainnet", FREE_NETWORK] } } }),
       ]);
 
       parentPosts = rawPosts.map((p) => ({
@@ -506,8 +474,8 @@ export function createServer() {
     const { txid } = req.params;
 
     const [follow, profileUpdate] = await Promise.all([
-      prisma.follow.findFirst({ where: { txid } }),
-      prisma.profileUpdateEvent.findFirst({ where: { txid } }),
+      prisma.follow.findFirst({ where: { txid, network: { in: ["mainnet", FREE_NETWORK] } } }),
+      prisma.profileUpdateEvent.findFirst({ where: { txid, network: { in: ["mainnet", FREE_NETWORK] } } }),
     ]);
 
     let item: Omit<StoredActivityItem, "replyCount" | "repostCount"> | null = null;
@@ -556,13 +524,13 @@ export function createServer() {
     const [follows, profileUpdates] = await Promise.all([
       prisma.follow.findMany({
         where: pubkey
-          ? { followerPubkey: pubkey, status: { not: "evicted" } }
-          : { status: { not: "evicted" } },
+          ? { followerPubkey: pubkey, status: { not: "evicted" }, network: { in: ["mainnet", FREE_NETWORK] } }
+          : { status: { not: "evicted" }, network: { in: ["mainnet", FREE_NETWORK] } },
       }),
       prisma.profileUpdateEvent.findMany({
         where: pubkey
-          ? { pubkey, status: { not: "evicted" } }
-          : { status: { not: "evicted" } },
+          ? { pubkey, status: { not: "evicted" }, network: { in: ["mainnet", FREE_NETWORK] } }
+          : { status: { not: "evicted" }, network: { in: ["mainnet", FREE_NETWORK] } },
       }),
     ]);
 

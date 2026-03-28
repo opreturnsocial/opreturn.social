@@ -64,6 +64,8 @@ No batching, no intermediate trust - every post is an on-chain bitcoin transacti
 
 - **Port:** 3002
 - **Endpoints:** `GET /health`, `GET /fee-rate`, `POST /post`, `POST /reply`, `POST /repost`, `POST /quote-repost`, `POST /follow`, `POST /profile`
+- **Free network endpoints:** `POST /free/post`, `POST /free/reply`, `POST /free/repost`, `POST /free/quote-repost`, `POST /free/follow`, `POST /free/profile` - no Lightning payment required, gated by mainnet activity + rate limit
+- **Free network config:** `FREE_NETWORK` env var sets the network name (default `mutinynet`). Mutinynet is the official default - a persistent custom signet at [mutinynet.com](https://mutinynet.com). Any bitcoin signet/testnet can be used by pointing `FREE_NETWORK_BITCOIN_RPC_*` at the appropriate node.
 - **Payment flow (all write endpoints) - estimate-first, no UTXO locking:**
   1. Verify Schnorr signature
   2. Build ORS payload hex (pure function, no RPC)

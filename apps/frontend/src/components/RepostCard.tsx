@@ -6,6 +6,7 @@ import { KIND_QUOTE_REPOST } from "../lib/ors";
 import { formatRelativeTime } from "../lib/utils";
 import { CardActions } from "./CardActions";
 import { RepostModal } from "./RepostModal";
+import { TxDropdownMenu } from "./TxDropdownMenu";
 import type { Post, Profile } from "../types";
 
 interface RepostCardProps {
@@ -50,18 +51,21 @@ export function RepostCard({
       }}
     >
       <CardContent className="pt-4">
-        <div
-          className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/profile/${repost.pubkey}`);
-          }}
-        >
-          <Repeat2 className="h-3.5 w-3.5" />
-          <span className="hover:underline cursor-pointer">
-            {repostDisplayName} reposted
-          </span>
-          <span>· {formatRelativeTime(repost.timestamp)}</span>
+        <div className="flex items-center justify-between mb-2">
+          <div
+            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/profile/${repost.pubkey}`);
+            }}
+          >
+            <Repeat2 className="h-3.5 w-3.5" />
+            <span className="hover:underline cursor-pointer">
+              {repostDisplayName} reposted
+            </span>
+            <span>· {formatRelativeTime(repost.timestamp)}</span>
+          </div>
+          <TxDropdownMenu txid={repost.txid} network={repost.network} blockHeight={repost.blockHeight} />
         </div>
 
         {repost.kind === KIND_QUOTE_REPOST && repost.content && (

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { mempoolTxUrl } from "@/lib/utils";
+import { mempoolTxUrl, isFreeNetwork, FREE_NETWORK } from "@/lib/utils";
 import { Clock, Check, Copy, ExternalLink, AlertTriangle } from "lucide-react";
 import { fetchActivity } from "../api/cache";
 import type { ActivityItem } from "../types";
@@ -122,7 +122,7 @@ export function ProfileModal({
         >
           <ExternalLink className="h-3 w-3" />
         </button>
-        {item.network === "testnet4" && (
+        {isFreeNetwork(item.network) && (
           <MakePermanentButton
             actionType="profile"
             pubkey={loggedInPubkey}
@@ -163,7 +163,7 @@ export function ProfileModal({
       );
 
       toast.success(`${fieldName} saved`, {
-        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, "testnet4"), "_blank") },
+        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, FREE_NETWORK), "_blank") },
       });
       onProfileUpdated();
     } catch (err) {

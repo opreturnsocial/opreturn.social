@@ -73,11 +73,11 @@ export const mainnetRpc = makeRpcClient({
   pass: process.env.BITCOIN_RPC_PASS ?? "polarpass",
 });
 
-export const testnet4Rpc = makeRpcClient({
-  host: process.env.TESTNET4_BITCOIN_RPC_HOST ?? "127.0.0.1",
-  port: process.env.TESTNET4_BITCOIN_RPC_PORT ?? "18444",
-  user: process.env.TESTNET4_BITCOIN_RPC_USER ?? "polaruser",
-  pass: process.env.TESTNET4_BITCOIN_RPC_PASS ?? "polarpass",
+export const freeNetworkRpc = makeRpcClient({
+  host: process.env.FREE_NETWORK_BITCOIN_RPC_HOST ?? "127.0.0.1",
+  port: process.env.FREE_NETWORK_BITCOIN_RPC_PORT ?? "18444",
+  user: process.env.FREE_NETWORK_BITCOIN_RPC_USER ?? "polaruser",
+  pass: process.env.FREE_NETWORK_BITCOIN_RPC_PASS ?? "polarpass",
 });
 
 // Re-export mainnet functions for backward compat

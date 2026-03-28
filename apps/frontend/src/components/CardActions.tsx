@@ -1,6 +1,7 @@
 import { BoxIcon, MessageCircle, Repeat2Icon, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { SponsorButton } from "./SponsorButton";
+import { isFreeNetwork } from "../lib/utils";
 
 interface CardActionsProps {
   txid: string;
@@ -62,14 +63,14 @@ export function CardActions({
           <Share2 className="h-3.5 w-3.5" />
         </div>
       )}
-      {network === "testnet4" && loggedInPubkey && (
+      {isFreeNetwork(network) && (
         <SponsorButton
           testnetTxid={txid}
           loggedInPubkey={loggedInPubkey}
           onSuccess={() => onRefresh?.()}
         />
       )}
-      {network !== "testnet4" && (
+      {!isFreeNetwork(network) && (
         <span title="On-chain bitcoin transaction">
           <BoxIcon className="h-3.5 w-3.5 text-orange-500" />
         </span>

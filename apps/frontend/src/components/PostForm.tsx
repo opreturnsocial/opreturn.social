@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { mempoolTxUrl } from "@/lib/utils";
+import { mempoolTxUrl, FREE_NETWORK } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { submitPostFree, submitPost } from "../api/facilitator";
@@ -70,7 +70,7 @@ export function PostForm({
       const signingPayload = version === 0 ? v0Unsigned : buildV1SigningBody(v0Unsigned);
       const sig = await signPayload(signingPayload, pubkey);
       const { txid } = await submitPostFree(content.trim(), pubkey, sig, version);
-      toast.success("Posted!", { action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, "testnet4"), "_blank") } });
+      toast.success("Posted!", { action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, FREE_NETWORK), "_blank") } });
       onContentChange("");
       onPosted();
     } catch (err) {

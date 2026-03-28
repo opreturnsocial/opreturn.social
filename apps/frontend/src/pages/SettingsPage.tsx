@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { mempoolTxUrl, FREE_NETWORK } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Copy, ExternalLink } from "lucide-react";
@@ -66,8 +67,8 @@ function SecretRow({
 const donationAddress = import.meta.env.VITE_FACILITATOR_DONATION_ADDRESS as
   | string
   | undefined;
-const donationAddressTestnet4 = import.meta.env
-  .VITE_FACILITATOR_DONATION_ADDRESS_TESTNET4 as string | undefined;
+const donationAddressFreeNetwork = import.meta.env
+  .VITE_FACILITATOR_DONATION_ADDRESS_FREE_NETWORK as string | undefined;
 const allowBroadcastV0 = import.meta.env.VITE_ALLOW_BROADCAST_V0 === "true";
 
 export function SettingsPage() {
@@ -318,7 +319,7 @@ export function SettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {(donationAddress || donationAddressTestnet4) && (
+      {(donationAddress || donationAddressFreeNetwork) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Support</CardTitle>
@@ -362,21 +363,21 @@ export function SettingsPage() {
                 </div>
               </div>
             )}
-            {donationAddressTestnet4 && (
+            {donationAddressFreeNetwork && (
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Testnet4
+                  {FREE_NETWORK.charAt(0).toUpperCase() + FREE_NETWORK.slice(1)}
                 </p>
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-sm font-mono text-muted-foreground truncate">
-                    {donationAddressTestnet4}
+                    {donationAddressFreeNetwork}
                   </p>
                   <div className="flex gap-2 shrink-0">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        navigator.clipboard.writeText(donationAddressTestnet4);
+                        navigator.clipboard.writeText(donationAddressFreeNetwork);
                         toast.success("Copied!");
                       }}
                     >
@@ -384,7 +385,7 @@ export function SettingsPage() {
                       Copy
                     </Button>
                     <a
-                      href={`https://mempool.space/testnet4/address/${donationAddressTestnet4}`}
+                      href={mempoolTxUrl(donationAddressFreeNetwork, FREE_NETWORK).replace("/tx/", "/address/")}
                       target="_blank"
                       rel="noopener noreferrer"
                     >

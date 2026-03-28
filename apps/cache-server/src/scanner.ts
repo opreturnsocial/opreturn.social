@@ -24,7 +24,9 @@ import type {
   OrsFollow,
 } from "@ors/protocol";
 import { prisma } from "./db.js";
-import { mainnetRpc, testnet4Rpc, type RpcClient } from "./rpc.js";
+import { mainnetRpc, freeNetworkRpc, type RpcClient } from "./rpc.js";
+
+const FREE_NETWORK = process.env.FREE_NETWORK ?? "mutinynet";
 
 const V1_CHUNK_WINDOW = 6;
 const POLL_INTERVAL_MS = 5000;
@@ -49,7 +51,7 @@ function extractPayloadFromScript(hex: string): Buffer | null {
 
 async function getOrCreateScannerState(network: string): Promise<number> {
   const startBlockEnv =
-    network === "testnet4" ? process.env.TESTNET4_START_BLOCK : process.env.START_BLOCK;
+    network !== "mainnet" ? process.env.FREE_NETWORK_START_BLOCK : process.env.START_BLOCK;
   const startBlock = parseInt(startBlockEnv ?? "0", 10) || 0;
   const state = await prisma.scannerState.upsert({
     where: { network },
@@ -119,12 +121,12 @@ async function scanBlock(
       const result = parseORSPayload(payload);
       if (!result.supported) continue;
 
-      // Testnet4 mainnet-activity gate
-      if (network === "testnet4") {
+      // Free network mainnet-activity gate
+      if (network !== "mainnet") {
         const active = await hasMainnetActivity(result.post.pubkey);
         if (!active) {
           console.log(
-            `[scanner:testnet4] Skipping TX ${tx.txid}: pubkey ${result.post.pubkey.slice(0, 8)}… has no mainnet activity`,
+            `[scanner:${network}] Skipping TX ${tx.txid}: pubkey ${result.post.pubkey.slice(0, 8)}… has no mainnet activity`,
           );
           continue;
         }
@@ -669,13 +671,13 @@ async function assembleV1Chunks(
       );
       if (!valid) continue;
 
-      // Testnet4 mainnet-activity gate for v1 assembled posts
-      if (network === "testnet4") {
+      // Free network mainnet-activity gate for v1 assembled posts
+      if (network !== "mainnet") {
         const pubkeyHex = Buffer.from(assembled.pubkey).toString("hex");
         const active = await hasMainnetActivity(pubkeyHex);
         if (!active) {
           console.log(
-            `[scanner:testnet4] Skipping v1 TX ${c0.txid}: no mainnet activity for pubkey`,
+            `[scanner:${network}] Skipping v1 TX ${c0.txid}: no mainnet activity for pubkey`,
           );
           break;
         }
@@ -732,8 +734,8 @@ export function startScanner(): void {
   const networks: Array<{ network: string; rpc: RpcClient }> = [
     { network: "mainnet", rpc: mainnetRpc },
   ];
-  if (process.env.TESTNET4_BITCOIN_RPC_HOST) {
-    networks.push({ network: "testnet4", rpc: testnet4Rpc });
+  if (process.env.FREE_NETWORK_BITCOIN_RPC_HOST) {
+    networks.push({ network: FREE_NETWORK, rpc: freeNetworkRpc });
   }
 
   console.log(

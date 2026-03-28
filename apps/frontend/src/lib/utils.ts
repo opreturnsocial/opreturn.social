@@ -9,9 +9,17 @@ export function shortenTxid(txid: string): string {
   return `${txid.slice(0, 8)}...${txid.slice(-8)}`;
 }
 
+export const FREE_NETWORK = import.meta.env.VITE_FREE_NETWORK ?? "mutinynet";
+
+export function isFreeNetwork(network?: string): boolean {
+  return !!network && network !== "mainnet";
+}
+
 export function mempoolTxUrl(txid: string, network?: string): string {
-  const base = network === "testnet4" ? "https://mempool.space/testnet4" : "https://mempool.space";
-  return `${base}/tx/${txid}`;
+  if (network === "testnet4") return `https://mempool.space/testnet4/tx/${txid}`;
+  if (network === "signet") return `https://mempool.space/signet/tx/${txid}`;
+  if (network === "mutinynet") return `https://mutinynet.com/tx/${txid}`;
+  return `https://mempool.space/tx/${txid}`;
 }
 
 export function formatRelativeTime(timestamp: number): string {

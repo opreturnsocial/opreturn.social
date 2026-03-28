@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,21 +8,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Clock,
-  CornerUpLeft,
-  MoreHorizontal,
-} from "lucide-react";
+import { CornerUpLeft } from "lucide-react";
 import { CardActions } from "./CardActions";
 import { RepostModal } from "./RepostModal";
-import { TxidDropdownItem } from "./TxidDropdownItem";
+import { TxDropdownMenu } from "./TxDropdownMenu";
 import { formatRelativeTime } from "../lib/utils";
 import { KIND_TEXT_NOTE, KIND_TEXT_REPLY, KIND_QUOTE_REPOST } from "../lib/ors";
 import type { Post, Profile, ActivityItem } from "../types";
@@ -184,47 +175,19 @@ export function PostCard({
               </span>
             </span>
           </div>
-          <div
-            className="flex items-center gap-1"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {post.blockHeight === 0 && (
-              <div title="Unconfirmed Transaction">
-                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                  {post.blockHeight === 0
-                    ? "In Mempool"
-                    : `Confirmed at block ${post.blockHeight}`}
-                </DropdownMenuLabel>
+          <TxDropdownMenu txid={post.txid} network={post.network} blockHeight={post.blockHeight}>
+            {noteOgRank !== undefined && post.kind === KIND_TEXT_NOTE && (
+              <>
                 <DropdownMenuSeparator />
-                <TxidDropdownItem txid={post.txid} network={post.network} />
-                {noteOgRank !== undefined && post.kind === KIND_TEXT_NOTE && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-xs text-muted-foreground"
-                      onClick={() => setNoteLeaderboardOpen(true)}
-                    >
-                      Note #{noteOgRank}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                <DropdownMenuItem
+                  className="text-xs text-muted-foreground"
+                  onClick={() => setNoteLeaderboardOpen(true)}
+                >
+                  Note #{noteOgRank}
+                </DropdownMenuItem>
+              </>
+            )}
+          </TxDropdownMenu>
         </div>
         <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
           {post.content}

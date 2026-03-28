@@ -1,19 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Clock, MoreHorizontal } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { CardActions } from "./CardActions";
 import { RepostModal } from "./RepostModal";
-import { TxidDropdownItem } from "./TxidDropdownItem";
+import { TxDropdownMenu } from "./TxDropdownMenu";
 import { formatRelativeTime } from "../lib/utils";
 import type { ActivityItem, Profile } from "../types";
 
@@ -124,27 +114,7 @@ export function ActivityCard({ item, profiles, loggedInPubkey, onRefresh }: Acti
               </span>
             </Link>
           </div>
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            {item.blockHeight === 0 && (
-              <div title="Unconfirmed Transaction">
-                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                  {item.blockHeight === 0 ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <TxidDropdownItem txid={item.txid} network={item.network} />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <TxDropdownMenu txid={item.txid} network={item.network} blockHeight={item.blockHeight} />
         </div>
         {body}
         <CardActions

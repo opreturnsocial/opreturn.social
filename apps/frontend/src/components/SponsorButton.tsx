@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { mempoolTxUrl } from "@/lib/utils";
 import { BoxIcon } from "lucide-react";
@@ -18,14 +19,16 @@ import { WalletFundingView } from "@/components/WalletFundingView";
 
 interface SponsorButtonProps {
   testnetTxid: string;
-  loggedInPubkey?: string;
+  loggedInPubkey?: string | null;
   onSuccess: () => void;
 }
 
 export function SponsorButton({
   testnetTxid,
+  loggedInPubkey,
   onSuccess,
 }: SponsorButtonProps) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [hasWallet, setHasWallet] = useState(
     () => !!(localStorage.getItem("ors_nwc_url") || (window as any).webln)
@@ -73,6 +76,10 @@ export function SponsorButton({
         title="Broadcast to mainnet"
         onClick={(e) => {
           e.stopPropagation();
+          if (!loggedInPubkey) {
+            navigate("/auth");
+            return;
+          }
           setOpen(true);
         }}
       >
