@@ -52,7 +52,7 @@ function verifyItem(item: FeedItem): boolean {
   return true; // activity items are not signature-verified
 }
 
-export function useFeed(filter?: { pubkey?: string; viewer?: string }) {
+export function useFeed(filter?: { pubkey?: string; viewer?: string; feedFilter?: string }) {
   const filterKey = JSON.stringify(filter ?? {});
 
   const [items, setItems] = useState<FeedItem[]>([]);

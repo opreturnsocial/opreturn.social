@@ -324,6 +324,7 @@ export function createServer() {
     const offset = Number(req.query.offset ?? 0);
     const pubkey = req.query.pubkey as string | undefined;
     const viewer = req.query.viewer as string | undefined;
+    const feedFilter = (req.query.feedFilter as string) ?? "posts";
     const fetchLimit = limit + offset;
 
     // Resolve which pubkeys to filter by
@@ -348,6 +349,7 @@ export function createServer() {
     const postWhere = {
       status: { not: "evicted" as const },
       ...networkFilter,
+      ...(feedFilter === "posts" ? { kind: { not: KIND_TEXT_REPLY } } : {}),
       ...(filterPubkeys ? { pubkey: { in: filterPubkeys } } : filterSinglePubkey ? { pubkey: filterSinglePubkey } : {}),
     };
     const followWhere = {
@@ -361,14 +363,15 @@ export function createServer() {
       ...(filterPubkeys ? { pubkey: { in: filterPubkeys } } : filterSinglePubkey ? { pubkey: filterSinglePubkey } : {}),
     };
 
+    const includeActivity = feedFilter === "all";
     const [allPosts, follows, profileUpdates] = await Promise.all([
       prisma.post.findMany({
         where: postWhere,
         orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
         take: fetchLimit,
       }),
-      prisma.follow.findMany({ where: followWhere }),
-      prisma.profileUpdateEvent.findMany({ where: profileUpdateWhere }),
+      includeActivity ? prisma.follow.findMany({ where: followWhere }) : Promise.resolve([]),
+      includeActivity ? prisma.profileUpdateEvent.findMany({ where: profileUpdateWhere }) : Promise.resolve([]),
     ]);
 
     // Deduplicate posts: mainnet wins on same sig

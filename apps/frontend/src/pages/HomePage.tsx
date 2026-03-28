@@ -35,10 +35,11 @@ export function HomePage({
   const [content, setContent] = useState(() => localStorage.getItem("ors_draft_post") ?? "");
   const [pendingPost, setPendingPost] = useState(() => !!localStorage.getItem("ors_pending_post"));
 
+  const feedFilter = localStorage.getItem("ors_feed_filter") ?? "posts";
   const filter =
     tab === "following" && loggedInPubkey
-      ? { viewer: loggedInPubkey }
-      : undefined;
+      ? { viewer: loggedInPubkey, feedFilter }
+      : { feedFilter };
   const { items, parentPosts, parentActivities, loading, error, refresh, loadMore, loadingMore, hasMore } = useFeed(filter);
 
   function handleContentChange(value: string) {

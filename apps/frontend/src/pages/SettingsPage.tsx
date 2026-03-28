@@ -82,6 +82,9 @@ export function SettingsPage() {
   const [feeBump, setFeeBumpState] = useState(getFeeBumpSatPerVByte);
   const [feePriority, setFeePriorityState] =
     useState<FeePriority>(getFeePriority);
+  const [feedFilter, setFeedFilterState] = useState(
+    () => localStorage.getItem("ors_feed_filter") ?? "posts",
+  );
   const { mainnetSatoshis, freeNetworkSatoshis, loading: balanceLoading } = useFacilitatorBalance();
   const hasPrivkey = !!localStorage.getItem("ors_local_privkey");
   const hasSecrets = hasPrivkey || hasNwcUrl;
@@ -102,6 +105,12 @@ export function SettingsPage() {
     toast.success(
       v === 0 ? "Fee bump reset to 0" : `Fee bump set to +${v} sat/vB`,
     );
+  }
+
+  function handleFeedFilterChange(v: string) {
+    localStorage.setItem("ors_feed_filter", v);
+    setFeedFilterState(v);
+    toast.success("Feed preference saved.");
   }
 
   function handleVersionChange(v: number) {
@@ -266,6 +275,38 @@ export function SettingsPage() {
               </Button>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Feed</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Choose what to show in your feed.
+          </p>
+          {(
+            [
+              { v: "posts", label: "Posts", description: "Text notes and reposts only" },
+              { v: "posts_and_replies", label: "Posts and replies", description: "Text notes, reposts and replies" },
+              { v: "all", label: "All", description: "Posts, replies, profile updates and follows" },
+            ] as { v: string; label: string; description: string }[]
+          ).map(({ v, label, description }) => (
+            <div
+              key={v}
+              className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${feedFilter === v ? "border-primary bg-primary/5" : "hover:bg-accent/30"}`}
+              onClick={() => handleFeedFilterChange(v)}
+            >
+              <div
+                className={`mt-0.5 h-4 w-4 rounded-full border-2 flex-shrink-0 ${feedFilter === v ? "border-primary bg-primary" : "border-muted-foreground"}`}
+              />
+              <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+              </div>
+            </div>
+          ))}
         </CardContent>
       </Card>
 

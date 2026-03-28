@@ -65,11 +65,12 @@ export async function fetchActivity(limit = 50, offset = 0, pubkey?: string): Pr
 export async function fetchFeed(
   limit = 20,
   offset = 0,
-  filter?: { pubkey?: string; viewer?: string },
+  filter?: { pubkey?: string; viewer?: string; feedFilter?: string },
 ): Promise<{ items: FeedItem[]; parentPosts: Post[]; parentActivities: ActivityItem[] }> {
   let url = `${BASE_URL}/feed?limit=${limit}&offset=${offset}`;
   if (filter?.pubkey) url += `&pubkey=${encodeURIComponent(filter.pubkey)}`;
   if (filter?.viewer) url += `&viewer=${encodeURIComponent(filter.viewer)}`;
+  if (filter?.feedFilter) url += `&feedFilter=${encodeURIComponent(filter.feedFilter)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
   const data = await res.json() as { items: FeedItem[]; parentPosts?: Post[]; parentActivities?: ActivityItem[] };
