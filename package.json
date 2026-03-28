@@ -6,15 +6,17 @@
     "apps/*"
   ],
   "scripts": {
-    "dev:cache": "yarn workspace @ors/cache-server dev",
-    "dev:facilitator": "yarn workspace @ors/facilitator dev",
-    "dev:frontend": "yarn workspace @ors/frontend dev",
-    "build:protocol": "yarn workspace @ors/protocol build",
-    "build:cache": "yarn workspace @ors/cache-server build",
-    "build:facilitator": "yarn workspace @ors/facilitator build",
-    "build:frontend": "yarn workspace @ors/frontend build",
-    "build": "yarn build:protocol && yarn build:cache && yarn build:facilitator && yarn build:frontend",
-    "typecheck": "yarn build:protocol && yarn workspace @ors/cache-server typecheck && yarn workspace @ors/facilitator typecheck && yarn workspace @ors/frontend typecheck"
+    "dev:cache": "yarn workspace @opreturnsocial/cache-server dev",
+    "dev:facilitator": "yarn workspace @opreturnsocial/facilitator dev",
+    "dev:frontend": "yarn workspace @opreturnsocial/frontend dev",
+    "build:protocol": "yarn workspace @opreturnsocial/protocol build",
+    "build:cache": "yarn workspace @opreturnsocial/cache-server build",
+    "build:facilitator": "yarn workspace @opreturnsocial/facilitator build",
+    "build:frontend": "yarn workspace @opreturnsocial/frontend build",
+    "dev:cli": "yarn workspace @opreturnsocial/cli dev",
+    "build:cli": "yarn workspace @opreturnsocial/cli build",
+    "build": "yarn build:protocol && yarn build:cache && yarn build:facilitator && yarn build:frontend && yarn build:cli",
+    "typecheck": "yarn build:protocol && yarn workspace @opreturnsocial/cache-server typecheck && yarn workspace @opreturnsocial/facilitator typecheck && yarn workspace @opreturnsocial/frontend typecheck && yarn workspace @opreturnsocial/cli typecheck"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

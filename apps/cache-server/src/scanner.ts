@@ -15,14 +15,14 @@ import {
   PROPERTY_AVATAR_URL,
   PROPERTY_BIO,
   getUnsignedBytes,
-} from "@ors/protocol";
+} from "@opreturnsocial/protocol";
 import type {
   OrsProfileUpdate,
   OrsTextReply,
   OrsRepost,
   OrsQuoteRepost,
   OrsFollow,
-} from "@ors/protocol";
+} from "@opreturnsocial/protocol";
 import { prisma } from "./db.js";
 import { mainnetRpc, freeNetworkRpc, type RpcClient } from "./rpc.js";
 

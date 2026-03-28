@@ -1,5 +1,5 @@
 /**
- * Browser-native ORS protocol helpers (mirrors @ors/protocol without Node.js deps).
+ * Browser-native ORS protocol helpers (mirrors @opreturnsocial/protocol without Node.js deps).
  * Format: ORS\x00 + pubkey(32) + kind(1) + kind-specific data  — no sig slot
  */
 
@@ -41,8 +41,13 @@ export function v0EstimatedVBytes(kindDataBytes: number): number {
 /**
  * Version-aware vBytes estimator. Pass kindDataBytes for the specific action.
  */
-export function estimatedVBytes(kindDataBytes: number, version: number): number {
-  return version === 0 ? v0EstimatedVBytes(kindDataBytes) : v1EstimatedVBytes(kindDataBytes);
+export function estimatedVBytes(
+  kindDataBytes: number,
+  version: number,
+): number {
+  return version === 0
+    ? v0EstimatedVBytes(kindDataBytes)
+    : v1EstimatedVBytes(kindDataBytes);
 }
 
 /**
@@ -85,14 +90,19 @@ function hexToBytes(hex: string): Uint8Array {
  * Build the unsigned payload for a TEXT_NOTE.
  * magic(4) + pubkey(32) + kind(1) + content_bytes
  */
-export function buildUnsignedPayload(content: string, pubkeyHex: string): Uint8Array<ArrayBuffer> {
+export function buildUnsignedPayload(
+  content: string,
+  pubkeyHex: string,
+): Uint8Array<ArrayBuffer> {
   const pubkey = hexToBytes(pubkeyHex);
   const contentBytes = new TextEncoder().encode(content);
   const buf = new Uint8Array(new ArrayBuffer(4 + 32 + 1 + contentBytes.length));
   let pos = 0;
 
-  buf.set(MAGIC, pos); pos += 4;
-  buf.set(pubkey, pos); pos += 32;
+  buf.set(MAGIC, pos);
+  pos += 4;
+  buf.set(pubkey, pos);
+  pos += 32;
 
   // kind byte at offset 36 of unsigned (= offset 100 of full payload)
   buf[pos++] = KIND_TEXT_NOTE;
@@ -109,20 +119,25 @@ export function buildUnsignedPayload(content: string, pubkeyHex: string): Uint8A
 export function buildReplyUnsignedPayload(
   content: string,
   pubkeyHex: string,
-  parentTxidHex: string
+  parentTxidHex: string,
 ): Uint8Array<ArrayBuffer> {
   const pubkey = hexToBytes(pubkeyHex);
   const parentTxid = hexToBytes(parentTxidHex);
   const contentBytes = new TextEncoder().encode(content);
-  const buf = new Uint8Array(new ArrayBuffer(4 + 32 + 1 + 32 + contentBytes.length));
+  const buf = new Uint8Array(
+    new ArrayBuffer(4 + 32 + 1 + 32 + contentBytes.length),
+  );
   let pos = 0;
 
-  buf.set(MAGIC, pos); pos += 4;
-  buf.set(pubkey, pos); pos += 32;
+  buf.set(MAGIC, pos);
+  pos += 4;
+  buf.set(pubkey, pos);
+  pos += 32;
 
   buf[pos++] = KIND_TEXT_REPLY;
 
-  buf.set(parentTxid, pos); pos += 32;
+  buf.set(parentTxid, pos);
+  pos += 32;
   buf.set(contentBytes, pos);
 
   return buf;
@@ -134,15 +149,17 @@ export function buildReplyUnsignedPayload(
  */
 export function buildRepostUnsignedPayload(
   pubkeyHex: string,
-  referencedTxidHex: string
+  referencedTxidHex: string,
 ): Uint8Array<ArrayBuffer> {
   const pubkey = hexToBytes(pubkeyHex);
   const referencedTxid = hexToBytes(referencedTxidHex);
   const buf = new Uint8Array(new ArrayBuffer(4 + 32 + 1 + 32));
   let pos = 0;
 
-  buf.set(MAGIC, pos); pos += 4;
-  buf.set(pubkey, pos); pos += 32;
+  buf.set(MAGIC, pos);
+  pos += 4;
+  buf.set(pubkey, pos);
+  pos += 32;
 
   buf[pos++] = KIND_REPOST;
 
@@ -158,20 +175,25 @@ export function buildRepostUnsignedPayload(
 export function buildQuoteRepostUnsignedPayload(
   content: string,
   pubkeyHex: string,
-  referencedTxidHex: string
+  referencedTxidHex: string,
 ): Uint8Array<ArrayBuffer> {
   const pubkey = hexToBytes(pubkeyHex);
   const referencedTxid = hexToBytes(referencedTxidHex);
   const contentBytes = new TextEncoder().encode(content);
-  const buf = new Uint8Array(new ArrayBuffer(4 + 32 + 1 + 32 + contentBytes.length));
+  const buf = new Uint8Array(
+    new ArrayBuffer(4 + 32 + 1 + 32 + contentBytes.length),
+  );
   let pos = 0;
 
-  buf.set(MAGIC, pos); pos += 4;
-  buf.set(pubkey, pos); pos += 32;
+  buf.set(MAGIC, pos);
+  pos += 4;
+  buf.set(pubkey, pos);
+  pos += 32;
 
   buf[pos++] = KIND_QUOTE_REPOST;
 
-  buf.set(referencedTxid, pos); pos += 32;
+  buf.set(referencedTxid, pos);
+  pos += 32;
   buf.set(contentBytes, pos);
 
   return buf;
@@ -184,19 +206,22 @@ export function buildQuoteRepostUnsignedPayload(
 export function buildFollowUnsignedPayload(
   targetPubkeyHex: string,
   isFollow: boolean,
-  pubkeyHex: string
+  pubkeyHex: string,
 ): Uint8Array<ArrayBuffer> {
   const pubkey = hexToBytes(pubkeyHex);
   const targetPubkey = hexToBytes(targetPubkeyHex);
   const buf = new Uint8Array(new ArrayBuffer(4 + 32 + 1 + 32 + 1));
   let pos = 0;
 
-  buf.set(MAGIC, pos); pos += 4;
-  buf.set(pubkey, pos); pos += 32;
+  buf.set(MAGIC, pos);
+  pos += 4;
+  buf.set(pubkey, pos);
+  pos += 32;
 
   buf[pos++] = KIND_FOLLOW;
 
-  buf.set(targetPubkey, pos); pos += 32;
+  buf.set(targetPubkey, pos);
+  pos += 32;
   buf[pos] = isFollow ? 0x01 : 0x00;
 
   return buf;
@@ -209,15 +234,20 @@ export function buildFollowUnsignedPayload(
 export function buildProfileUpdateUnsignedPayload(
   propertyKind: number,
   value: Uint8Array | string,
-  pubkeyHex: string
+  pubkeyHex: string,
 ): Uint8Array<ArrayBuffer> {
   const pubkey = hexToBytes(pubkeyHex);
-  const valueBytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
-  const buf = new Uint8Array(new ArrayBuffer(4 + 32 + 1 + 1 + valueBytes.length));
+  const valueBytes =
+    typeof value === "string" ? new TextEncoder().encode(value) : value;
+  const buf = new Uint8Array(
+    new ArrayBuffer(4 + 32 + 1 + 1 + valueBytes.length),
+  );
   let pos = 0;
 
-  buf.set(MAGIC, pos); pos += 4;
-  buf.set(pubkey, pos); pos += 32;
+  buf.set(MAGIC, pos);
+  pos += 4;
+  buf.set(pubkey, pos);
+  pos += 32;
 
   // kind byte
   buf[pos++] = KIND_PROFILE_UPDATE;

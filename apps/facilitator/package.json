@@ -1,5 +1,5 @@
 {
-  "name": "@ors/facilitator",
+  "name": "@opreturnsocial/facilitator",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@getalby/sdk": "^7.0.0",
-    "@ors/protocol": "*",
+    "@opreturnsocial/protocol": "*",
     "@prisma/client": "^5.13.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

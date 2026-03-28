@@ -20,6 +20,7 @@ import { TxPage } from "./pages/TxPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { AuthPage } from "./pages/AuthPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { AgentsPage } from "./pages/AgentsPage";
 import { useFeed } from "./hooks/useFeed";
 import { useWalletBalance } from "./hooks/useWalletBalance";
 import {
@@ -189,6 +190,7 @@ export function App() {
                   loggedInPubkey && navigate(`/profile/${loggedInPubkey}`)
                 }
                 onSettings={() => navigate("/settings")}
+                onAgents={() => navigate("/agents")}
                 onLogout={handleLogoutRequest}
                 onTopUp={
                   loggedInPubkey ? () => setFundWalletOpen(true) : undefined
@@ -228,6 +230,7 @@ export function App() {
                   <Route path="/post/:txid" element={<TxRedirect />} />
                   <Route path="/activity/:txid" element={<TxRedirect />} />
                   <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/agents" element={<AgentsPage />} />
                   <Route
                     path="/profile/:pubkey"
                     element={

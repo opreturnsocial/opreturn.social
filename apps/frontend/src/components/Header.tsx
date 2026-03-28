@@ -21,6 +21,7 @@ interface HeaderProps {
   onEditProfile: () => void;
   onViewProfile: () => void;
   onSettings: () => void;
+  onAgents: () => void;
   onLogout: () => void;
   onTopUp?: () => void;
 }
@@ -33,6 +34,7 @@ export function Header({
   onEditProfile,
   onViewProfile,
   onSettings,
+  onAgents,
   onLogout,
   onTopUp,
 }: HeaderProps) {
@@ -120,6 +122,9 @@ export function Header({
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onSettings}>
                   Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onAgents}>
+                  Agents
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <a href="https://ors.dev" target="_blank" rel="noopener noreferrer">

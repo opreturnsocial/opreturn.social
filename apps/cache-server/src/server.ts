@@ -14,7 +14,7 @@ import {
   KIND_REPOST,
   KIND_QUOTE_REPOST,
   KIND_FOLLOW,
-} from "@ors/protocol";
+} from "@opreturnsocial/protocol";
 import { prisma } from "./db.js";
 import { rescanFrom } from "./scanner.js";
 import type { StoredPost, StoredProfile, StoredActivityItem } from "./types.js";

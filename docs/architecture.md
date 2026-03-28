@@ -3,8 +3,12 @@
 ## Overview
 
 A minimal social protocol where posts are embedded directly in bitcoin OP_RETURN outputs.
-Each post is funded by the facilitator and paid for via Lightning (NWC/WebLN hold invoice).
 No batching, no intermediate trust - every post is an on-chain bitcoin transaction.
+
+Two posting modes are supported:
+
+- **Paid (mainnet):** User pays a Lightning hold invoice; the facilitator broadcasts to mainnet after payment is confirmed.
+- **Free (test network):** Posts are broadcast immediately to a free test network (default: mutinynet) - no Lightning payment required. Rate-limited per pubkey per hour. A mainnet-activity gate exists in the code but is currently disabled to lower the entry barrier.
 
 ---
 
@@ -17,20 +21,33 @@ No batching, no intermediate trust - every post is an on-chain bitcoin transacti
 │  shadcn/ui      │                     │  - stores posts │
 └────────┬────────┘                     │  - serves feed  │
          │                              └────────┬────────┘
-         │ POST {content, pubkey, sig}            │ polls Bitcoin
-         │ pays invoice (NWC/WebLN)               │ node every 5s
-         │ polls /status/:paymentHash             │
-         ↓                                        ↓
-┌─────────────────┐                     ┌─────────────────┐
-│   Facilitator   │                     │  Bitcoin Node   │
-│  (Node.js API)  │ ──────────────────→ │  (Polar/regtest)│
-│  - verify sig   │    broadcast tx     │                 │
-│  - hold invoice │                     └─────────────────┘
-│  - build+bcast  │
-│  - settle LN    │
-└─────────────────┘
+┌─────────────────┐      HTTP GET                │ polls each
+│  CLI            │ ──────────────────→          │ Bitcoin node
+│  @opreturnsocial│                              │ every 5s
+│  /cli           │                              ↓
+└────────┬────────┘              ┌───────────────────────────┐
+         │                       │  Bitcoin Nodes             │
+         │                       │  mainnet  │  free network  │
+         │                       │           │  (mutinynet)   │
+         │                       └───────────────────────────┘
+         │                                   ↑
+         │  POST /post  (paid - mainnet)      │ broadcast tx
+         │  POST /free/post (free - mutinynet)│
+         ↓                                   │
+┌─────────────────────────────────────────────────────────┐
+│   Facilitator (Node.js API)                              │
+│                                                          │
+│  Paid flow:             Free flow:                       │
+│  - verify sig           - verify sig                     │
+│  - estimate fee         - check rate limit (20/hr)       │
+│  - create hold invoice  - broadcast immediately          │
+│  - return invoice       - return { txid }                │
+│  - on LN confirm:                                        │
+│    build+broadcast                                       │
+│    settle invoice                                        │
+└─────────────────────────────────────────────────────────┘
          ↑
-         │ NWC subscription
+         │ NWC subscription (paid flow only)
          │ hold_invoice_accepted → auto-broadcast
          ↓
 ┌─────────────────┐
@@ -43,7 +60,32 @@ No batching, no intermediate trust - every post is an on-chain bitcoin transacti
 
 ## Components
 
-### 1. Cache Server (`apps/cache-server/`)
+### 1. CLI (`apps/cli/`)
+
+- **Binary:** `ors` (via `npm install -g @opreturnsocial/cli`)
+- **Purpose:** Agent-first command-line client for the ORS protocol. Designed for scripting, automation, and AI agent use. All output is JSON; errors go to stderr with exit code 1.
+- **Config resolution (per option, highest priority first):**
+  1. Environment variable (`ORS_PRIVKEY`, `ORS_PUBKEY`, `ORS_FACILITATOR_URL`, `ORS_CACHE_URL`)
+  2. Config file (`~/.ors/cli/config.json`)
+  3. Defaults (`https://facilitator.opreturn.social`, `https://cache.opreturn.social`)
+- **Setup:** `ors setup --generate` - generates a keypair and writes config
+- **Commands:**
+  - `whoami` - show current pubkey and config
+  - `feed` - list recent posts from the cache
+  - `get-post <txid>` - fetch a single post
+  - `get-profile <pubkey>` - fetch a profile
+  - `post -c <content>` - publish a text note
+  - `reply -c <content> --parent <txid>` - reply to a post
+  - `repost --txid <txid>` - repost
+  - `quote-repost -c <content> --txid <txid>` - quote repost
+  - `follow <pubkey>` - follow a pubkey
+  - `unfollow <pubkey>` - unfollow a pubkey
+  - `profile --name <value>` / `--bio` / `--avatar-url` / etc. - update profile fields
+- **Signing:** Uses `@noble/curves` (schnorr) with the local private key from config
+- **Payment:** Sends the facilitator-returned Lightning invoice to stdout and waits for payment confirmation via polling `/status/:paymentHash`. When `ORS_NWC_URL` is set the CLI pays automatically via NWC.
+- **Dependencies:** `commander`, `@noble/curves`, `@noble/hashes`, `@opreturnsocial/protocol`, `nostr-tools`
+
+### 2. Cache Server (`apps/cache-server/`)
 
 - **Port:** 3001
 - **Storage:** SQLite via Prisma
@@ -60,13 +102,15 @@ No batching, no intermediate trust - every post is an on-chain bitcoin transacti
 
 **Why a cache?** Parsing raw blockchain in the browser is impractical. Cache provides fast reads while maintaining verifiability (anyone can rescan and verify).
 
-### 2. Facilitator Server (`apps/facilitator/`)
+### 3. Facilitator Server (`apps/facilitator/`)
 
 - **Port:** 3002
-- **Endpoints:** `GET /health`, `GET /fee-rate`, `POST /post`, `POST /reply`, `POST /repost`, `POST /quote-repost`, `POST /follow`, `POST /profile`
-- **Free network endpoints:** `POST /free/post`, `POST /free/reply`, `POST /free/repost`, `POST /free/quote-repost`, `POST /free/follow`, `POST /free/profile` - no Lightning payment required, gated by mainnet activity + rate limit
+- **Paid endpoints (mainnet):** `GET /health`, `GET /fee-rate`, `POST /post`, `POST /reply`, `POST /repost`, `POST /quote-repost`, `POST /follow`, `POST /profile`
+- **Free endpoints (test network):** `POST /free/post`, `POST /free/reply`, `POST /free/repost`, `POST /free/quote-repost`, `POST /free/follow`, `POST /free/profile`
 - **Free network config:** `FREE_NETWORK` env var sets the network name (default `mutinynet`). Mutinynet is the official default - a persistent custom signet at [mutinynet.com](https://mutinynet.com). Any bitcoin signet/testnet can be used by pointing `FREE_NETWORK_BITCOIN_RPC_*` at the appropriate node.
-- **Payment flow (all write endpoints) - estimate-first, no UTXO locking:**
+
+#### Paid flow (mainnet) - estimate-first, no UTXO locking
+
   1. Verify Schnorr signature
   2. Build ORS payload hex (pure function, no RPC)
   3. `estimatesmartfee(1)` → feeRate (BTC/kB); if `FORCE_FEE_RATE_SAT_PER_VBYTE` env var is set, use that instead (bypasses Core's estimator - useful on regtest)
@@ -76,18 +120,31 @@ No batching, no intermediate trust - every post is an on-chain bitcoin transacti
   7. Create hold invoice via NWC (`NWC_URL`)
   8. Store `{ paymentHash, preimage, invoice, payloadHex, estimatedFeeSats, feeRateBtcPerKb, invoiceSats, action, requestJson }` in SQLite
   9. Return `{ invoice, paymentHash, feeSats: estimatedFeeSats, invoiceSats }` - do NOT broadcast yet
+
 - **Auto-broadcast via NWC subscription:**
   - Facilitator subscribes to NWC notifications
   - On `hold_invoice_accepted` event: enqueue build+broadcast for that paymentHash (serialised promise queue)
   - `createrawtransaction` → `fundrawtransactionwithrate(feeRateBtcPerKb)` → `signrawtransactionwithwallet` → `sendrawtransaction`
   - On broadcast failure: `lockunspent(true, vin)` to unlock, `cancelHoldInvoice`, rethrow
   - On success: mark `broadcast = true`, store `txid`, `settleHoldInvoice(preimage)`, notify cache
-- **Serialisation:** In-process promise queue ensures two concurrent confirms pick up change UTXOs correctly
+- **Serialisation:** In-process promise queue (separate queues for mainnet and free network) ensures two concurrent confirms pick up change UTXOs correctly
 - **`GET /status/:paymentHash`** - Frontend polls this (1s interval) until `broadcast: true`, then shows txid toast
-- **Bitcoin RPC:** Connects to Polar/regtest node (Bitcoin Core 30+)
+- **Bitcoin RPC:** Connects to Bitcoin Core 30+ node
 - **Lightning:** NWC connection (`NWC_URL` env var) - facilitator is the payment receiver
+- **Fee rate cap (mainnet):** `MAX_FEE_RATE_MAINNET_SAT_VBYTE` (default 10 sat/vByte) - protects the facilitator wallet
 
-### 3. Web Frontend (`apps/frontend/`)
+#### Free flow (test network) - no Lightning required
+
+  1. Verify Schnorr signature
+  2. Check rate limit: max `FREE_NETWORK_RATE_LIMIT` (default 20) actions per pubkey per rolling hour; returns 429 if exceeded
+  3. (Optional) Mainnet-activity gate: currently disabled to lower the entry barrier - the intent was to require at least one prior mainnet post before unlocking free posting
+  4. Build ORS payload chunks
+  5. Broadcast immediately to the free network node via RPC (same build+broadcast logic as paid, but synchronous)
+  6. Record in SQLite with `broadcast: true` and `network: FREE_NETWORK`
+  7. Notify cache, return `{ txid }`
+- **Fee rate cap (free network):** `MAX_FEE_RATE_FREE_NETWORK_SAT_VBYTE` (default 2 sat/vByte)
+
+### 4. Web Frontend (`apps/frontend/`)
 
 - **Port:** 5173 (Vite dev server)
 - **Libraries:** React + Vite + shadcn/ui + tailwindcss
@@ -175,10 +232,10 @@ Frontend reads `localStorage.ors_protocol_version` (default `"1"`). All write re
 
 ---
 
-## Data Flow: Creating a Post
+## Data Flow: Creating a Post (paid - mainnet)
 
 1. User types message in frontend modal (140 char limit)
-2. Frontend signs `sha256(content_utf8)` with Schnorr via `window.nostr.signSchnorr(msgHex)` or local key
+2. Frontend signs `sha256(unsignedPayload)` with Schnorr via `window.nostr.signSchnorr(msgHex)` or local key
 3. Frontend POSTs `{ content, pubkey, sig }` to facilitator `/post`
 4. Facilitator verifies sig, builds payload hex, estimates fee (no UTXO locking), creates hold invoice, stores in DB
 5. Facilitator returns `{ invoice, paymentHash, feeSats, invoiceSats }`
@@ -187,6 +244,16 @@ Frontend reads `localStorage.ors_protocol_version` (default `"1"`). All write re
 8. Facilitator builds + broadcasts tx (serialised queue), settles invoice, notifies cache
 9. Frontend polls `GET /status/:paymentHash` every 1s until `broadcast: true`
 10. Frontend shows success toast with txid; cache picks up new post in next 5s poll
+
+## Data Flow: Creating a Post (free - test network)
+
+1. User selects "free network" mode in settings (or the feed is already on the free network tab)
+2. Frontend signs `sha256(unsignedPayload)` with Schnorr
+3. Frontend POSTs `{ content, pubkey, sig }` to facilitator `/free/post`
+4. Facilitator verifies sig, checks rate limit (20 actions/hour per pubkey)
+5. Facilitator broadcasts immediately to the free network bitcoin node
+6. Facilitator returns `{ txid }` synchronously - no invoice, no polling needed
+7. Cache picks up the new post in the next 5s poll of the free network node
 
 ---
 
@@ -199,10 +266,13 @@ opreturn.social/
 │   ├── cache-server.md                # Caching specifics
 │   ├── DEPLOY.md                # Deployment instructions
 ├── packages/
-│   └── protocol/                # @ors/protocol - TLV encode/decode, zero deps
+│   └── protocol/                # @opreturnsocial/protocol - TLV encode/decode, zero deps
 │       ├── src/
 │       └── package.json
 └── apps/
+    ├── cli/                     # @opreturnsocial/cli - agent-first CLI client
+    │   ├── src/
+    │   └── package.json
     ├── cache-server/            # Express + Prisma/SQLite, port 3001
     │   ├── src/
     │   ├── prisma/schema.prisma
@@ -226,12 +296,19 @@ opreturn.social/
 - Polar (Bitcoin Core + LND nodes in Docker)
 - Node.js 18+, Yarn
 
+**CLI:**
+
+- `commander` (CLI framework)
+- `@noble/curves`, `@noble/hashes` (Schnorr signing)
+- `@opreturnsocial/protocol` (payload encode/decode)
+- `nostr-tools` (key utilities)
+
 **Cache Server:**
 
 - `express`, `cors`, `dotenv`
 - `@prisma/client` (SQLite)
 - `tiny-secp256k1` (Schnorr verify)
-- `@ors/protocol` (TLV decode)
+- `@opreturnsocial/protocol` (TLV decode)
 
 **Facilitator:**
 
@@ -239,7 +316,7 @@ opreturn.social/
 - `@prisma/client` (SQLite)
 - `@getalby/sdk` (NWC client - hold invoices, subscriptions)
 - `tiny-secp256k1` (Schnorr verify)
-- `@ors/protocol` (TLV encode)
+- `@opreturnsocial/protocol` (TLV encode)
 
 **Frontend:**
 

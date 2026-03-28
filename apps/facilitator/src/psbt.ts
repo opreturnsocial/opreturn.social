@@ -24,7 +24,7 @@ import {
   PUBKEY_BYTES,
   PARENT_TXID_BYTES,
   SIG_BYTES,
-} from "@ors/protocol";
+} from "@opreturnsocial/protocol";
 
 function verifySchnorrBytes(msgHash: Buffer, pubkey: Buffer, sig: Buffer): void {
   const valid = tinysecp.verifySchnorr(msgHash, pubkey, sig);
