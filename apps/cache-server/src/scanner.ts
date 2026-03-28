@@ -11,9 +11,10 @@ import {
   KIND_REPOST,
   KIND_QUOTE_REPOST,
   KIND_FOLLOW,
-  PROPERTY_NAME,
-  PROPERTY_AVATAR_URL,
-  PROPERTY_BIO,
+  PROFILE_PROPERTY_NAME,
+  PROFILE_PROPERTY_AVATAR_URL,
+  PROFILE_PROPERTY_BIO,
+  PROFILE_PROPERTY_BOT,
   getUnsignedBytes,
 } from "@opreturnsocial/protocol";
 import type {
@@ -253,12 +254,14 @@ async function scanBlock(
         );
       } else if (result.post.kind === KIND_PROFILE_UPDATE) {
         const update = result.post as OrsProfileUpdate;
-        const data: { name?: string; avatarUrl?: string; bio?: string } = {};
-        if (update.propertyKind === PROPERTY_NAME) data.name = update.content;
-        else if (update.propertyKind === PROPERTY_AVATAR_URL)
+        const data: { name?: string; avatarUrl?: string; bio?: string; bot?: boolean } = {};
+        if (update.propertyKind === PROFILE_PROPERTY_NAME) data.name = update.content;
+        else if (update.propertyKind === PROFILE_PROPERTY_AVATAR_URL)
           data.avatarUrl = update.content;
-        else if (update.propertyKind === PROPERTY_BIO)
+        else if (update.propertyKind === PROFILE_PROPERTY_BIO)
           data.bio = update.content;
+        else if (update.propertyKind === PROFILE_PROPERTY_BOT)
+          data.bot = update.content === "true";
 
         if (Object.keys(data).length > 0) {
           await prisma.profile.upsert({
@@ -610,10 +613,10 @@ async function storeV1Post(
     const propertyKind = kindData[0];
     const valueBytes = kindData.subarray(1);
     const data: { name?: string; avatarUrl?: string; bio?: string } = {};
-    if (propertyKind === PROPERTY_NAME) data.name = valueBytes.toString("utf8");
-    else if (propertyKind === PROPERTY_AVATAR_URL)
+    if (propertyKind === PROFILE_PROPERTY_NAME) data.name = valueBytes.toString("utf8");
+    else if (propertyKind === PROFILE_PROPERTY_AVATAR_URL)
       data.avatarUrl = valueBytes.toString("utf8");
-    else if (propertyKind === PROPERTY_BIO)
+    else if (propertyKind === PROFILE_PROPERTY_BIO)
       data.bio = valueBytes.toString("utf8");
     if (Object.keys(data).length > 0) {
       const valueStr = valueBytes.toString("utf8");

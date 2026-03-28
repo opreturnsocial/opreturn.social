@@ -7,7 +7,7 @@ import {
   KIND_REPOST,
   KIND_QUOTE_REPOST,
   KIND_FOLLOW,
-  PROPERTY_BOT,
+  PROFILE_PROPERTY_BOT,
   DATA_OFFSET,
   PROPERTY_KIND_OFFSET,
   PROFILE_VALUE_OFFSET,
@@ -65,7 +65,7 @@ export function parseORSPayload(data: Buffer): ParsedOrsResult {
     const valueBytes = data.subarray(PROFILE_VALUE_OFFSET);
 
     let content: string;
-    if (propertyKind === PROPERTY_BOT) {
+    if (propertyKind === PROFILE_PROPERTY_BOT) {
       content = valueBytes[0] === 0x01 ? "true" : "false";
     } else {
       content = valueBytes.toString("utf8");

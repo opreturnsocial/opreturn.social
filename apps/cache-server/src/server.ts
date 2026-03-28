@@ -14,6 +14,7 @@ import {
   KIND_REPOST,
   KIND_QUOTE_REPOST,
   KIND_FOLLOW,
+  PROFILE_PROPERTY_BOT,
 } from "@opreturnsocial/protocol";
 import { prisma } from "./db.js";
 import { rescanFrom } from "./scanner.js";
@@ -165,7 +166,10 @@ export function createServer() {
       const sigBuf = Buffer.from(sig, "hex");
       let unsigned: Buffer;
       if (kind === KIND_PROFILE_UPDATE && typeof propertyKind === "number" && value !== undefined) {
-        unsigned = buildProfileUpdateUnsignedPayload(propertyKind, value, pubkeyBuf);
+        const profileValue: string | Buffer = propertyKind === PROFILE_PROPERTY_BOT
+          ? Buffer.from([value === "true" ? 0x01 : 0x00])
+          : value;
+        unsigned = buildProfileUpdateUnsignedPayload(propertyKind, profileValue, pubkeyBuf);
       } else if (kind === KIND_TEXT_REPLY && parentTxid) {
         unsigned = buildReplyUnsignedPayload(content ?? "", pubkeyBuf, Buffer.from(parentTxid, "hex"));
       } else if (kind === KIND_REPOST && parentTxid) {
@@ -195,10 +199,11 @@ export function createServer() {
     }
 
     if (kind === KIND_PROFILE_UPDATE && typeof propertyKind === "number" && value !== undefined) {
-      const data: { name?: string; avatarUrl?: string; bio?: string } = {};
+      const data: { name?: string; avatarUrl?: string; bio?: string; bot?: boolean } = {};
       if (propertyKind === 0x00) data.name = value;
       else if (propertyKind === 0x01) data.avatarUrl = value;
       else if (propertyKind === 0x02) data.bio = value;
+      else if (propertyKind === PROFILE_PROPERTY_BOT) data.bot = value === "true";
 
       if (Object.keys(data).length > 0) {
         await prisma.profile.upsert({
@@ -282,6 +287,7 @@ export function createServer() {
       name: p.name,
       bio: p.bio,
       avatarUrl: p.avatarUrl,
+      bot: p.bot,
       status: p.status,
     }));
     res.json({ profiles: result });

@@ -33,9 +33,9 @@ import {
 import { signPayload } from "../lib/signing";
 import type { Profile } from "../types";
 
-const PROPERTY_NAME = 0x00;
-const PROPERTY_AVATAR_URL = 0x01;
-const PROPERTY_BIO = 0x02;
+const PROFILE_PROPERTY_NAME = 0x00;
+const PROFILE_PROPERTY_AVATAR_URL = 0x01;
+const PROFILE_PROPERTY_BIO = 0x02;
 
 interface ProfileModalProps {
   open: boolean;
@@ -198,13 +198,13 @@ export function ProfileModal({
                 />
                 <Button
                   size="sm"
-                  onClick={() => saveField(PROPERTY_NAME, name, "Name")}
+                  onClick={() => saveField(PROFILE_PROPERTY_NAME, name, "Name")}
                   disabled={saving !== null || !name.trim() || name.trim() === (profile?.name ?? "").trim()}
                 >
                   {saving === "Name" ? "Saving…" : "Save"}
                 </Button>
               </div>
-              <TxidRow propertyKind={PROPERTY_NAME} content={name} />
+              <TxidRow propertyKind={PROFILE_PROPERTY_NAME} content={name} />
             </div>
 
             <div className="space-y-1">
@@ -235,7 +235,7 @@ export function ProfileModal({
                     ) {
                       setShowOrsWarning(true);
                     } else {
-                      saveField(PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL");
+                      saveField(PROFILE_PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL");
                     }
                   }}
                   disabled={saving !== null || !avatarUrl.trim() || avatarUrl.trim() === (profile?.avatarUrl ?? "").trim()}
@@ -263,7 +263,7 @@ export function ProfileModal({
                   </p>
                 </div>
               )}
-              <TxidRow propertyKind={PROPERTY_AVATAR_URL} content={avatarUrl} />
+              <TxidRow propertyKind={PROFILE_PROPERTY_AVATAR_URL} content={avatarUrl} />
             </div>
 
             <div className="space-y-1">
@@ -279,13 +279,13 @@ export function ProfileModal({
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  onClick={() => saveField(PROPERTY_BIO, bio, "Bio")}
+                  onClick={() => saveField(PROFILE_PROPERTY_BIO, bio, "Bio")}
                   disabled={saving !== null || !bio.trim() || bio.trim() === (profile?.bio ?? "").trim()}
                 >
                   {saving === "Bio" ? "Saving…" : "Save Bio"}
                 </Button>
               </div>
-              <TxidRow propertyKind={PROPERTY_BIO} content={bio} />
+              <TxidRow propertyKind={PROFILE_PROPERTY_BIO} content={bio} />
             </div>
           </div>
         </DialogContent>
@@ -318,7 +318,7 @@ export function ProfileModal({
             <AlertDialogAction
               onClick={() => {
                 setShowOrsWarning(false);
-                saveField(PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL");
+                saveField(PROFILE_PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL");
               }}
             >
               Save anyway

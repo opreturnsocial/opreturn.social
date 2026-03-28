@@ -18,6 +18,7 @@ export interface Profile {
   name?: string | null;
   bio?: string | null;
   avatarUrl?: string | null;
+  bot?: boolean | null;
   status?: string;
 }
 

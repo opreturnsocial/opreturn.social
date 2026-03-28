@@ -167,13 +167,19 @@ export function PostCard({
             }}
           >
             <AvatarCircle profile={profile} pubkey={post.pubkey} />
-            <span className="text-sm font-medium hover:underline cursor-pointer">
-              {displayName}
-              <span className="text-muted-foreground font-normal no-underline">
-                {" "}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-sm font-medium hover:underline cursor-pointer">
+                {displayName}
+              </span>
+              {profile?.bot === true && (
+                <span className="inline-flex items-center rounded-full border border-gray-400 bg-gray-50 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700">
+                  Bot
+                </span>
+              )}
+              <span className="text-sm text-muted-foreground font-normal">
                 · {relativeTime}
               </span>
-            </span>
+            </div>
           </div>
           <TxDropdownMenu txid={post.txid} network={post.network} blockHeight={post.blockHeight}>
             {noteOgRank !== undefined && post.kind === KIND_TEXT_NOTE && (

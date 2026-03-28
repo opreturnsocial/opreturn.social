@@ -34,6 +34,7 @@ model Profile {
   name      String?
   bio       String?
   avatarUrl String?
+  bot       Boolean?
   status    String  @default("confirmed")
 
   @@id([pubkey, network])

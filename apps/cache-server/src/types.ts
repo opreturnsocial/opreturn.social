@@ -15,6 +15,7 @@ export interface StoredProfile {
   name?: string | null;
   bio?: string | null;
   avatarUrl?: string | null;
+  bot?: boolean | null;
   status?: string | null;
 }
 

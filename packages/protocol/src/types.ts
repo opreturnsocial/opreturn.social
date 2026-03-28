@@ -34,12 +34,12 @@ export const REPLY_CONTENT_OFFSET = 133;
 export const MAX_CONTENT_BYTES = 277;
 
 // Profile property kind values
-export const PROPERTY_NAME = 0x00;
-export const PROPERTY_AVATAR_URL = 0x01;
-export const PROPERTY_BIO = 0x02;
-export const PROPERTY_BANNER_URL = 0x03;
-export const PROPERTY_BOT = 0x04;
-export const PROPERTY_WEBSITE_URL = 0x05;
+export const PROFILE_PROPERTY_NAME = 0x00;
+export const PROFILE_PROPERTY_AVATAR_URL = 0x01;
+export const PROFILE_PROPERTY_BIO = 0x02;
+export const PROFILE_PROPERTY_BANNER_URL = 0x03;
+export const PROFILE_PROPERTY_BOT = 0x04;
+export const PROFILE_PROPERTY_WEBSITE_URL = 0x05;
 
 export interface OrsPost {
   kind: number;

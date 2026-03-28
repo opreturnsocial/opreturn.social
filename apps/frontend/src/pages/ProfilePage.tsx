@@ -332,6 +332,11 @@ export function ProfilePage({
                 Rep {repScore}
               </button>
             )}
+            {profile?.bot === true && (
+              <span className="inline-flex items-center rounded-full border border-gray-400 bg-gray-50 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700">
+                Bot
+              </span>
+            )}
             {canFollow && (
               <div className="flex items-center gap-2">
                 <Button

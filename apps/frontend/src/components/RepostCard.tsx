@@ -63,6 +63,11 @@ export function RepostCard({
             <span className="hover:underline cursor-pointer">
               {repostDisplayName} reposted
             </span>
+            {repostProfile?.bot === true && (
+              <span className="inline-flex items-center rounded-full border border-gray-400 bg-gray-50 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700">
+                Bot
+              </span>
+            )}
             <span>· {formatRelativeTime(repost.timestamp)}</span>
           </div>
           <TxDropdownMenu txid={repost.txid} network={repost.network} blockHeight={repost.blockHeight} />

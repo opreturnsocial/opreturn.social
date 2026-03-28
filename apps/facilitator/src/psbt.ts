@@ -21,6 +21,7 @@ import {
   KIND_REPOST,
   KIND_QUOTE_REPOST,
   KIND_FOLLOW,
+  PROFILE_PROPERTY_BOT,
   PUBKEY_BYTES,
   PARENT_TXID_BYTES,
   SIG_BYTES,
@@ -182,7 +183,10 @@ export function buildPayloadFollowV1(targetPubkey: string, isFollow: boolean, pu
 
 export function buildPayloadProfileV1(propertyKind: number, value: string, pubkey: string, sig: string): string[] {
   const pubkeyBuf = Buffer.from(pubkey, "hex");
-  const kindData = Buffer.concat([Buffer.from([propertyKind]), Buffer.from(value, "utf8")]);
+  const valueBytes = propertyKind === PROFILE_PROPERTY_BOT
+    ? Buffer.from([value === "true" ? 0x01 : 0x00])
+    : Buffer.from(value, "utf8");
+  const kindData = Buffer.concat([Buffer.from([propertyKind]), valueBytes]);
   verifyV1Schnorr(pubkeyBuf, KIND_PROFILE_UPDATE, kindData, sig);
   return buildV1ChunkHexes(pubkeyBuf, sig, KIND_PROFILE_UPDATE, kindData);
 }
