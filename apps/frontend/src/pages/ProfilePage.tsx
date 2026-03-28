@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { BoxIcon, Clock, MoreHorizontal } from "lucide-react";
+import { BoxIcon, Clock, ExternalLinkIcon, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { mempoolTxUrl, isFreeNetwork, FREE_NETWORK } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -85,9 +85,15 @@ export function ProfilePage({
   const navigate = useNavigate();
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [parentPosts, setParentPosts] = useState<Record<string, Post>>({});
-  const [parentActivities, setParentActivities] = useState<Record<string, ActivityItem>>({});
-  const posts = feedItems.flatMap((i) => (i.feedType === "post" ? [i as Post] : []));
-  const profileActivity = feedItems.flatMap((i) => (i.feedType === "activity" ? [i as ActivityItem] : []));
+  const [parentActivities, setParentActivities] = useState<
+    Record<string, ActivityItem>
+  >({});
+  const posts = feedItems.flatMap((i) =>
+    i.feedType === "post" ? [i as Post] : [],
+  );
+  const profileActivity = feedItems.flatMap((i) =>
+    i.feedType === "activity" ? [i as ActivityItem] : [],
+  );
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -139,16 +145,19 @@ export function ProfilePage({
     loadingRef.current = true;
     setHasMore(true);
     try {
-      const [feedData, followsData, followers, ogData] =
-        await Promise.all([
-          fetchFeed(20, 0, { pubkey }),
-          fetchFollows(pubkey),
-          fetchFollowers(pubkey),
-          fetchOgLeaderboard(),
-        ]);
+      const [feedData, followsData, followers, ogData] = await Promise.all([
+        fetchFeed(20, 0, { pubkey }),
+        fetchFollows(pubkey),
+        fetchFollowers(pubkey),
+        fetchOgLeaderboard(),
+      ]);
       setFeedItems(feedData.items);
-      setParentPosts(Object.fromEntries(feedData.parentPosts.map((p) => [p.txid, p])));
-      setParentActivities(Object.fromEntries(feedData.parentActivities.map((a) => [a.txid, a])));
+      setParentPosts(
+        Object.fromEntries(feedData.parentPosts.map((p) => [p.txid, p])),
+      );
+      setParentActivities(
+        Object.fromEntries(feedData.parentActivities.map((a) => [a.txid, a])),
+      );
       setFollowingPubkeys([
         ...followsData.pubkeys,
         ...followsData.pendingPubkeys,
@@ -174,12 +183,22 @@ export function ProfilePage({
   }, [load]);
 
   const loadMorePosts = useCallback(async () => {
-    if (!pubkey || loadingRef.current || loadingMoreRef.current || !hasMoreRef.current) return;
+    if (
+      !pubkey ||
+      loadingRef.current ||
+      loadingMoreRef.current ||
+      !hasMoreRef.current
+    )
+      return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const offset = offsetRef.current;
-      const { items: data, parentPosts: pp, parentActivities: pa } = await fetchFeed(20, offset, { pubkey });
+      const {
+        items: data,
+        parentPosts: pp,
+        parentActivities: pa,
+      } = await fetchFeed(20, offset, { pubkey });
       if (data.length < 20) {
         hasMoreRef.current = false;
         setHasMore(false);
@@ -190,8 +209,14 @@ export function ProfilePage({
           const existingTxids = new Set(prev.map((i) => i.txid));
           return [...prev, ...data.filter((i) => !existingTxids.has(i.txid))];
         });
-        setParentPosts((prev) => ({ ...Object.fromEntries(pp.map((p) => [p.txid, p])), ...prev }));
-        setParentActivities((prev) => ({ ...Object.fromEntries(pa.map((a) => [a.txid, a])), ...prev }));
+        setParentPosts((prev) => ({
+          ...Object.fromEntries(pp.map((p) => [p.txid, p])),
+          ...prev,
+        }));
+        setParentActivities((prev) => ({
+          ...Object.fromEntries(pa.map((a) => [a.txid, a])),
+          ...prev,
+        }));
       } else {
         hasMoreRef.current = false;
         setHasMore(false);
@@ -236,7 +261,11 @@ export function ProfilePage({
       setPendingFollowerPubkeys(new Set(followers.pendingPubkeys));
       setFollowerInfo(new Map(followers.follows.map((f) => [f.pubkey, f])));
       toast.success(newIsFollow ? "Followed!" : "Unfollowed!", {
-        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, FREE_NETWORK), "_blank") },
+        action: {
+          label: "View on mempool",
+          onClick: () =>
+            window.open(mempoolTxUrl(txid, FREE_NETWORK), "_blank"),
+        },
       });
     } catch (err) {
       toast.error((err as Error).message ?? "Failed");
@@ -320,16 +349,27 @@ export function ProfilePage({
             <p className="text-sm text-muted-foreground">{profile.bio}</p>
           )}
           {pubkey && (
-            <p
-              className="text-xs text-muted-foreground font-mono mt-0.5 cursor-pointer hover:text-foreground transition-colors truncate"
-              title="Click to copy npub"
-              onClick={() => {
-                navigator.clipboard.writeText(nip19.npubEncode(pubkey));
-                toast.success("npub copied!");
-              }}
-            >
-              {nip19.npubEncode(pubkey)}
-            </p>
+            <div className="flex items-center gap-1 mt-0.5">
+              <p
+                className="text-xs text-muted-foreground font-mono cursor-pointer hover:text-foreground transition-colors truncate"
+                title="Click to copy npub"
+                onClick={() => {
+                  navigator.clipboard.writeText(nip19.npubEncode(pubkey));
+                  toast.success("npub copied!");
+                }}
+              >
+                {nip19.npubEncode(pubkey)}
+              </p>
+              <a
+                href={`https://njump.me/${nip19.npubEncode(pubkey)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open on njump.me"
+                className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+              >
+                <ExternalLinkIcon className="h-3 w-3 -mt-0.5" />
+              </a>
+            </div>
           )}
           <div className="flex gap-4 mt-2 text-sm">
             <button
@@ -360,9 +400,15 @@ export function ProfilePage({
           };
           const profileFieldTxids = new Map<number, ActivityItem>();
           for (const item of profileActivity) {
-            if (item.type === "profile_update" && item.propertyKind !== undefined) {
+            if (
+              item.type === "profile_update" &&
+              item.propertyKind !== undefined
+            ) {
               const existing = profileFieldTxids.get(item.propertyKind);
-              if (!existing || (item.network === "mainnet" && existing.network !== "mainnet")) {
+              if (
+                !existing ||
+                (item.network === "mainnet" && existing.network !== "mainnet")
+              ) {
                 profileFieldTxids.set(item.propertyKind, item);
               }
             }
@@ -381,7 +427,9 @@ export function ProfilePage({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {Array.from(profileFieldTxids.entries()).map(([kind, item]) => {
-                  const fieldContent = [profile?.name, profile?.avatarUrl, profile?.bio][kind] ?? "";
+                  const fieldContent =
+                    [profile?.name, profile?.avatarUrl, profile?.bio][kind] ??
+                    "";
                   return (
                     <div key={kind}>
                       <DropdownMenuLabel className="text-xs font-normal">
@@ -390,7 +438,9 @@ export function ProfilePage({
                             {FIELD_NAMES[kind] ?? `Field ${kind}`}
                           </span>
                           {!isFreeNetwork(item.network) && (
-                            <span title="On-chain bitcoin transaction"><BoxIcon className="w-3 h-3 text-orange-500 shrink-0" /></span>
+                            <span title="On-chain bitcoin transaction">
+                              <BoxIcon className="w-3 h-3 text-orange-500 shrink-0" />
+                            </span>
                           )}
                         </span>
                         <span className="text-muted-foreground">
@@ -401,16 +451,17 @@ export function ProfilePage({
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <TxidDropdownItem txid={item.txid} network={item.network}>
-                        {isFreeNetwork(item.network) && loggedInPubkey === pubkey && (
-                          <MakePermanentButton
-                            actionType="profile"
-                            pubkey={loggedInPubkey!}
-                            propertyKind={kind}
-                            content={fieldContent}
-                            disabled={!fieldContent}
-                            onSuccess={load}
-                          />
-                        )}
+                        {isFreeNetwork(item.network) &&
+                          loggedInPubkey === pubkey && (
+                            <MakePermanentButton
+                              actionType="profile"
+                              pubkey={loggedInPubkey!}
+                              propertyKind={kind}
+                              content={fieldContent}
+                              disabled={!fieldContent}
+                              onSuccess={load}
+                            />
+                          )}
                       </TxidDropdownItem>
                     </div>
                   );
@@ -445,7 +496,9 @@ export function ProfilePage({
           {(() => {
             // postsById uses both global context and profile-specific items for parent post lookup
             const postsById: Record<string, Post> = { ...parentPosts };
-            const activityById: Record<string, ActivityItem> = { ...parentActivities };
+            const activityById: Record<string, ActivityItem> = {
+              ...parentActivities,
+            };
             for (const a of allActivityItems ?? []) activityById[a.txid] = a;
             for (const p of allPosts) postsById[p.txid] = p;
             for (const p of posts) postsById[p.txid] = p;
@@ -546,7 +599,9 @@ export function ProfilePage({
       <div ref={sentinelRef} className="h-1" />
       {loadingMore && <Skeleton className="h-24 w-full mt-3" />}
       {!hasMore && !loadingMore && posts.length > 0 && (
-        <p className="text-center text-xs text-muted-foreground py-6">You've reached the end.</p>
+        <p className="text-center text-xs text-muted-foreground py-6">
+          You've reached the end.
+        </p>
       )}
 
       <Dialog open={ogModalOpen} onOpenChange={setOgModalOpen}>
@@ -676,7 +731,9 @@ export function ProfilePage({
                       </span>
                     )}
                     {info && !isPending && !isFreeNetwork(info.network) && (
-                      <span title="On-chain bitcoin transaction"><BoxIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" /></span>
+                      <span title="On-chain bitcoin transaction">
+                        <BoxIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                      </span>
                     )}
                     {info && (
                       <DropdownMenu>
@@ -696,18 +753,27 @@ export function ProfilePage({
                               : `Confirmed at block ${info.blockHeight}`}
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <TxidDropdownItem txid={info.txid} network={info.network}>
+                          <TxidDropdownItem
+                            txid={info.txid}
+                            network={info.network}
+                          >
                             {isFreeNetwork(info.network) &&
-                              ((followListModal === "following" && loggedInPubkey === pubkey) ||
-                                (followListModal === "followers" && pk === loggedInPubkey)) && (
-                              <MakePermanentButton
-                                actionType="follow"
-                                pubkey={loggedInPubkey!}
-                                followPubkey={followListModal === "following" ? pk : pubkey!}
-                                followIsFollow={true}
-                                onSuccess={load}
-                              />
-                            )}
+                              ((followListModal === "following" &&
+                                loggedInPubkey === pubkey) ||
+                                (followListModal === "followers" &&
+                                  pk === loggedInPubkey)) && (
+                                <MakePermanentButton
+                                  actionType="follow"
+                                  pubkey={loggedInPubkey!}
+                                  followPubkey={
+                                    followListModal === "following"
+                                      ? pk
+                                      : pubkey!
+                                  }
+                                  followIsFollow={true}
+                                  onSuccess={load}
+                                />
+                              )}
                           </TxidDropdownItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
