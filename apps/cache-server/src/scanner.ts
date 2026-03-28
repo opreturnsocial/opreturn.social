@@ -24,11 +24,13 @@ import type {
   OrsFollow,
 } from "@opreturnsocial/protocol";
 import { prisma } from "./db.js";
-import { mainnetRpc, freeNetworkRpc, type RpcClient } from "./rpc.js";
+import { mainnetRpc, freeNetworkRpc, RpcError, type RpcClient } from "./rpc.js";
 
 const FREE_NETWORK = process.env.FREE_NETWORK ?? "mutinynet";
 
 const V1_CHUNK_WINDOW = 6;
+// Bitcoin RPC error code for "No such mempool or blockchain transaction"
+const RPC_TX_NOT_FOUND = -5;
 const POLL_INTERVAL_MS = 5000;
 
 function extractPayloadFromScript(hex: string): Buffer | null {
@@ -51,7 +53,9 @@ function extractPayloadFromScript(hex: string): Buffer | null {
 
 async function getOrCreateScannerState(network: string): Promise<number> {
   const startBlockEnv =
-    network !== "mainnet" ? process.env.FREE_NETWORK_START_BLOCK : process.env.START_BLOCK;
+    network !== "mainnet"
+      ? process.env.FREE_NETWORK_START_BLOCK
+      : process.env.START_BLOCK;
   const startBlock = parseInt(startBlockEnv ?? "0", 10) || 0;
   const state = await prisma.scannerState.upsert({
     where: { network },
@@ -391,35 +395,74 @@ async function checkMempoolEvictions(
   network: string,
   rpc: RpcClient,
 ): Promise<void> {
-  const pending = await prisma.post.findMany({
-    where: { status: "pending", network },
+  const pendingOrEvictedPosts = await prisma.post.findMany({
+    where: { status: { in: ["pending", "evicted"] }, network },
   });
-  for (const post of pending) {
+  for (const post of pendingOrEvictedPosts) {
     try {
-      await rpc.getMempoolEntry(post.txid);
-    } catch {
-      await prisma.post.update({
-        where: { txid_network: { txid: post.txid, network } },
-        data: { status: "evicted" },
-      });
-      console.log(`[scanner:${network}] Post evicted: ${post.txid}`);
+      const tx = await rpc.getRawTransaction(post.txid);
+      if (tx.confirmations && tx.confirmations > 0) {
+        await prisma.post.update({
+          where: { txid_network: { txid: post.txid, network } },
+          data: {
+            status: "confirmed",
+            blockHeight: tx.blockheight,
+            timestamp: tx.blocktime,
+          },
+        });
+      }
+    } catch (err) {
+      if (err instanceof RpcError && err.code === RPC_TX_NOT_FOUND) {
+        if (post.status !== "evicted") {
+          await prisma.post.update({
+            where: { txid_network: { txid: post.txid, network } },
+            data: { status: "evicted" },
+          });
+          console.log(`[scanner:${network}] Post evicted: ${post.txid}`);
+        }
+      } else {
+        console.error(
+          `[scanner:${network}] Error checking post ${post.txid}:`,
+          err,
+        );
+      }
     }
   }
 
-  const pendingProfileUpdates = await prisma.profileUpdateEvent.findMany({
-    where: { status: "pending", network },
-  });
-  for (const evt of pendingProfileUpdates) {
+  const pendingOrEvictedProfileUpdates =
+    await prisma.profileUpdateEvent.findMany({
+      where: { status: { in: ["pending", "evicted"] }, network },
+    });
+  for (const evt of pendingOrEvictedProfileUpdates) {
     try {
-      await rpc.getMempoolEntry(evt.txid);
-    } catch {
-      await prisma.profileUpdateEvent.update({
-        where: { txid_network: { txid: evt.txid, network } },
-        data: { status: "evicted" },
-      });
-      console.log(
-        `[scanner:${network}] ProfileUpdateEvent evicted: ${evt.txid}`,
-      );
+      const tx = await rpc.getRawTransaction(evt.txid);
+      if (tx.confirmations && tx.confirmations > 0) {
+        await prisma.profileUpdateEvent.update({
+          where: { txid_network: { txid: evt.txid, network } },
+          data: {
+            status: "confirmed",
+            blockHeight: tx.blockheight,
+            timestamp: tx.blocktime,
+          },
+        });
+      }
+    } catch (err) {
+      if (err instanceof RpcError && err.code === RPC_TX_NOT_FOUND) {
+        if (evt.status !== "evicted") {
+          await prisma.profileUpdateEvent.update({
+            where: { txid_network: { txid: evt.txid, network } },
+            data: { status: "evicted" },
+          });
+          console.log(
+            `[scanner:${network}] ProfileUpdateEvent evicted: ${evt.txid}`,
+          );
+        }
+      } else {
+        console.error(
+          `[scanner:${network}] Error checking profileUpdateEvent ${evt.txid}:`,
+          err,
+        );
+      }
     }
   }
 
@@ -438,22 +481,33 @@ async function checkMempoolEvictions(
               network,
             },
           },
-          data: { status: "confirmed" },
+          data: {
+            status: "confirmed",
+            blockHeight: tx.blockheight,
+            timestamp: tx.blocktime,
+          },
         });
       }
-    } catch {
-      if (follow.status !== "evicted") {
-        await prisma.follow.update({
-          where: {
-            followerPubkey_followeePubkey_network: {
-              followerPubkey: follow.followerPubkey,
-              followeePubkey: follow.followeePubkey,
-              network,
+    } catch (err) {
+      if (err instanceof RpcError && err.code === RPC_TX_NOT_FOUND) {
+        if (follow.status !== "evicted") {
+          await prisma.follow.update({
+            where: {
+              followerPubkey_followeePubkey_network: {
+                followerPubkey: follow.followerPubkey,
+                followeePubkey: follow.followeePubkey,
+                network,
+              },
             },
-          },
-          data: { status: "evicted" },
-        });
-        console.log(`[scanner:${network}] Follow evicted: ${follow.txid}`);
+            data: { status: "evicted" },
+          });
+          console.log(`[scanner:${network}] Follow evicted: ${follow.txid}`);
+        }
+      } else {
+        console.error(
+          `[scanner:${network}] Error checking follow ${follow.txid}:`,
+          err,
+        );
       }
     }
   }
@@ -728,7 +782,6 @@ async function runScanCycle(network: string, rpc: RpcClient): Promise<void> {
     console.error(`[scanner:${network}] Error during scan cycle:`, err);
   }
 }
-
 
 export function startScanner(): void {
   const networks: Array<{ network: string; rpc: RpcClient }> = [

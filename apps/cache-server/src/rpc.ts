@@ -1,3 +1,13 @@
+export class RpcError extends Error {
+  constructor(
+    message: string,
+    public readonly code: number,
+  ) {
+    super(message);
+    this.name = "RpcError";
+  }
+}
+
 function makeRpcClient(config: {
   host: string;
   port: string;
@@ -24,15 +34,12 @@ function makeRpcClient(config: {
       },
       body,
     });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`RPC HTTP error ${res.status}: ${text}`);
-    }
     const json = (await res.json()) as {
       result: T;
-      error: { message: string } | null;
+      error: { message: string; code: number } | null;
     };
-    if (json.error) throw new Error(`RPC error: ${json.error.message}`);
+    if (json.error) throw new RpcError(json.error.message, json.error.code);
+    if (!res.ok) throw new Error(`RPC HTTP error ${res.status}`);
     return json.result;
   }
 
@@ -43,7 +50,10 @@ function makeRpcClient(config: {
     getMempoolEntry: (txid: string) =>
       rpcCall<unknown>("getmempoolentry", [txid]),
     getRawTransaction: (txid: string) =>
-      rpcCall<{ confirmations?: number }>("getrawtransaction", [txid, true]),
+      rpcCall<{ confirmations?: number; blockheight?: number; blocktime?: number }>(
+        "getrawtransaction",
+        [txid, true],
+      ),
   };
 }
 
