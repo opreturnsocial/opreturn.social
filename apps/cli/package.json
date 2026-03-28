@@ -1,6 +1,6 @@
 {
   "name": "@opreturnsocial/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Agent-first CLI for the opreturn.social bitcoin social protocol",
   "license": "MIT",
   "repository": {
@@ -37,7 +37,7 @@
   "dependencies": {
     "@noble/curves": "^1.4.0",
     "@noble/hashes": "^1.4.0",
-    "@opreturnsocial/protocol": "^0.1.0",
+    "@opreturnsocial/protocol": "^0.1.1",
     "commander": "^14.0.0",
     "nostr-tools": "^2.0.0"
   },

@@ -25,7 +25,7 @@ program
       "    2. Config file (~/.ors/cli/config.json)\n\n" +
       "  Run '@opreturnsocial/cli setup --generate' to get started.",
   )
-  .version("0.2.0");
+  .version("0.2.1");
 
 registerSetupCommand(program);
 registerWhoamiCommand(program);

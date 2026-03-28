@@ -1,6 +1,6 @@
 {
   "name": "@opreturnsocial/protocol",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zero-dependency TLV encoding/decoding library for the opreturn.social bitcoin social protocol",
   "license": "MIT",
   "repository": {
@@ -9,7 +9,14 @@
     "directory": "packages/protocol"
   },
   "homepage": "https://opreturn.social",
-  "keywords": ["bitcoin", "op_return", "social", "protocol", "nostr", "lightning"],
+  "keywords": [
+    "bitcoin",
+    "op_return",
+    "social",
+    "protocol",
+    "nostr",
+    "lightning"
+  ],
   "files": [
     "dist/**/*"
   ],
