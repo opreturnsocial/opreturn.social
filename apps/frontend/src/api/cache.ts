@@ -84,6 +84,13 @@ export async function fetchOgLeaderboard(): Promise<{ pubkey: string; rank: numb
   return data.leaderboard;
 }
 
+export async function fetchRepLeaderboard(): Promise<{ pubkey: string; rep: number; rank: number }[]> {
+  const res = await fetch(`${BASE_URL}/rep`);
+  if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
+  const data = (await res.json()) as { leaderboard: { pubkey: string; rep: number; rank: number }[] };
+  return data.leaderboard;
+}
+
 export async function fetchNoteOgRanks(): Promise<{ txid: string; rank: number; timestamp: number; pubkey: string; content: string }[]> {
   const res = await fetch(`${BASE_URL}/og/notes`);
   if (!res.ok) throw new Error(`Cache server error: ${res.status}`);

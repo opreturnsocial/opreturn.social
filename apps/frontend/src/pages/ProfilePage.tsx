@@ -39,6 +39,7 @@ import {
   fetchFollows,
   fetchFollowers,
   fetchOgLeaderboard,
+  fetchRepLeaderboard,
 } from "../api/cache";
 import type { FollowRecord } from "../api/cache";
 import { submitFollowFree } from "../api/facilitator";
@@ -125,6 +126,11 @@ export function ProfilePage({
     { pubkey: string; rank: number; firstTimestamp: number }[]
   >([]);
   const [ogModalOpen, setOgModalOpen] = useState(false);
+  const [repScore, setRepScore] = useState<number | null>(null);
+  const [repLeaderboard, setRepLeaderboard] = useState<
+    { pubkey: string; rep: number; rank: number }[]
+  >([]);
+  const [repModalOpen, setRepModalOpen] = useState(false);
   const [localIsFollowing, setLocalIsFollowing] = useState<boolean | null>(
     null,
   );
@@ -145,12 +151,14 @@ export function ProfilePage({
     loadingRef.current = true;
     setHasMore(true);
     try {
-      const [feedData, followsData, followers, ogData] = await Promise.all([
-        fetchFeed(20, 0, { pubkey }),
-        fetchFollows(pubkey),
-        fetchFollowers(pubkey),
-        fetchOgLeaderboard(),
-      ]);
+      const [feedData, followsData, followers, ogData, repData] =
+        await Promise.all([
+          fetchFeed(20, 0, { pubkey }),
+          fetchFollows(pubkey),
+          fetchFollowers(pubkey),
+          fetchOgLeaderboard(),
+          fetchRepLeaderboard(),
+        ]);
       setFeedItems(feedData.items);
       setParentPosts(
         Object.fromEntries(feedData.parentPosts.map((p) => [p.txid, p])),
@@ -170,6 +178,9 @@ export function ProfilePage({
       setOgLeaderboard(ogData);
       const entry = ogData.find((e) => e.pubkey === pubkey);
       setOgRank(entry?.rank ?? null);
+      setRepLeaderboard(repData);
+      const repEntry = repData.find((e) => e.pubkey === pubkey);
+      setRepScore(repEntry?.rep ?? null);
     } catch {
       // ignore
     } finally {
@@ -311,6 +322,14 @@ export function ProfilePage({
                 className="inline-flex items-center rounded-full border border-orange-400 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-600 hover:bg-orange-100 transition-colors dark:bg-orange-950 dark:text-orange-400 dark:border-orange-700 dark:hover:bg-orange-900"
               >
                 OG #{ogRank}
+              </button>
+            )}
+            {repScore !== null && repScore > 0 && (
+              <button
+                onClick={() => setRepModalOpen(true)}
+                className="inline-flex items-center rounded-full border border-blue-400 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition-colors dark:bg-blue-950 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-900"
+              >
+                Rep {repScore}
               </button>
             )}
             {canFollow && (
@@ -645,6 +664,55 @@ export function ProfilePage({
                         {new Date(
                           entry.firstTimestamp * 1000,
                         ).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={repModalOpen} onOpenChange={setRepModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reputation Leaderboard</DialogTitle>
+          </DialogHeader>
+          {repLeaderboard.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Nobody here yet.
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {repLeaderboard.map((entry) => {
+                const p = profiles[entry.pubkey];
+                const name = p?.name ?? `${entry.pubkey.slice(0, 8)}…`;
+                return (
+                  <Link
+                    key={entry.pubkey}
+                    to={`/profile/${entry.pubkey}`}
+                    className="flex items-center gap-3 hover:bg-muted rounded-md p-2 transition-colors"
+                    onClick={() => setRepModalOpen(false)}
+                  >
+                    <span className="text-xs font-mono text-muted-foreground w-8 shrink-0">
+                      #{entry.rank}
+                    </span>
+                    {p?.avatarUrl ? (
+                      <img
+                        src={p.avatarUrl}
+                        alt={name}
+                        className="h-9 w-9 rounded-full object-cover border border-border"
+                      />
+                    ) : (
+                      <div className="h-9 w-9 rounded-full bg-orange-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                        {name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Rep {entry.rep}
                       </p>
                     </div>
                   </Link>

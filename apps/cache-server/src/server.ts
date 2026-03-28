@@ -611,6 +611,46 @@ export function createServer() {
     res.json({ notes: ranked });
   });
 
+  app.get("/rep", async (_req, res) => {
+    // Rep leaderboard: mainnet_txs + sum(follower.mainnet_txs * 0.5)
+    const [txCounts, follows] = await Promise.all([
+      prisma.post.groupBy({
+        by: ["pubkey"],
+        where: { status: "confirmed", network: "mainnet" },
+        _count: { _all: true },
+      }),
+      prisma.follow.findMany({
+        where: { status: "confirmed", network: "mainnet", isFollow: true },
+        select: { followerPubkey: true, followeePubkey: true },
+      }),
+    ]);
+
+    const txMap = new Map<string, number>(
+      txCounts.map((r) => [r.pubkey, r._count._all]),
+    );
+
+    // Seed rep with own tx counts
+    const repMap = new Map<string, number>();
+    for (const [pubkey, count] of txMap) {
+      repMap.set(pubkey, count);
+    }
+
+    // Add follower boost
+    for (const follow of follows) {
+      const followerTxs = txMap.get(follow.followerPubkey) ?? 0;
+      if (followerTxs === 0) continue;
+      const current = repMap.get(follow.followeePubkey) ?? 0;
+      repMap.set(follow.followeePubkey, current + followerTxs * 0.5);
+    }
+
+    const leaderboard = Array.from(repMap.entries())
+      .map(([pubkey, rep]) => ({ pubkey, rep: Math.round(rep) }))
+      .sort((a, b) => b.rep - a.rep || a.pubkey.localeCompare(b.pubkey))
+      .map((entry, i) => ({ ...entry, rank: i + 1 }));
+
+    res.json({ leaderboard });
+  });
+
   app.post("/rescan", requireInternalToken, async (req, res) => {
     const { from_block, network } = req.body as { from_block: number; network?: string };
     if (typeof from_block !== "number") {
