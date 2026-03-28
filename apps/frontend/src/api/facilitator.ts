@@ -70,6 +70,12 @@ export async function sponsorTransaction(testnetTxid: string, protocolVersion: n
   return postAndGetInvoice("/sponsor", { testnetTxid, protocolVersion, feeBumpSatPerVByte: getFeeBumpSatPerVByte(), feePriority: getFeePriority() });
 }
 
+export async function getFacilitatorWalletBalance(): Promise<{ mainnetSatoshis: number; freeNetworkSatoshis: number }> {
+  const res = await fetch(`${BASE_URL}/wallet-balance`);
+  if (!res.ok) throw new Error(`Failed to fetch wallet balance`);
+  return res.json() as Promise<{ mainnetSatoshis: number; freeNetworkSatoshis: number }>;
+}
+
 export async function getStatus(paymentHash: string): Promise<{ broadcast: boolean; txid: string | null }> {
   const res = await fetch(`${BASE_URL}/status/${paymentHash}`);
   if (!res.ok) {

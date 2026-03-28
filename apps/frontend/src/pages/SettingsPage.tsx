@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useFacilitatorBalance } from "@/hooks/useFacilitatorBalance";
 import { toast } from "sonner";
 import { mempoolTxUrl, FREE_NETWORK } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -81,6 +82,7 @@ export function SettingsPage() {
   const [feeBump, setFeeBumpState] = useState(getFeeBumpSatPerVByte);
   const [feePriority, setFeePriorityState] =
     useState<FeePriority>(getFeePriority);
+  const { mainnetSatoshis, freeNetworkSatoshis, loading: balanceLoading } = useFacilitatorBalance();
   const hasPrivkey = !!localStorage.getItem("ors_local_privkey");
   const hasSecrets = hasPrivkey || hasNwcUrl;
 
@@ -333,6 +335,11 @@ export function SettingsPage() {
                 <p className="text-xs font-medium text-muted-foreground">
                   Mainnet
                 </p>
+                {balanceLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading...</p>
+                ) : mainnetSatoshis !== null ? (
+                  <p className="text-xs text-muted-foreground">{mainnetSatoshis.toLocaleString()} sats</p>
+                ) : null}
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-sm font-mono text-muted-foreground truncate">
                     {donationAddress}
@@ -368,6 +375,11 @@ export function SettingsPage() {
                 <p className="text-xs font-medium text-muted-foreground">
                   {FREE_NETWORK.charAt(0).toUpperCase() + FREE_NETWORK.slice(1)}
                 </p>
+                {balanceLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading...</p>
+                ) : freeNetworkSatoshis !== null ? (
+                  <p className="text-xs text-muted-foreground">{freeNetworkSatoshis.toLocaleString()} sats</p>
+                ) : null}
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-sm font-mono text-muted-foreground truncate">
                     {donationAddressFreeNetwork}

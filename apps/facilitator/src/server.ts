@@ -357,6 +357,21 @@ export function createServer() {
     res.json({ ok: true });
   });
 
+  app.get("/wallet-balance", async (_req, res) => {
+    try {
+      const [mainnet, freeNetwork] = await Promise.all([
+        getRpc("mainnet").getWalletBalance(),
+        getRpc("free").getWalletBalance(),
+      ]);
+      res.json({
+        mainnetSatoshis: Math.round(mainnet * 1e8),
+        freeNetworkSatoshis: Math.round(freeNetwork * 1e8),
+      });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   app.get("/fee-rate", async (_req, res) => {
     try {
       const [highRate, mediumRate] = await Promise.all([
