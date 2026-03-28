@@ -88,7 +88,7 @@ export function RepostModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[480px]" onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle>Repost</DialogTitle>
         </DialogHeader>
