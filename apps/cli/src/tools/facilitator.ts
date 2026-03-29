@@ -2,6 +2,13 @@ export interface FreePostResponse {
   txid: string;
 }
 
+export interface InvoiceResponse {
+  invoice: string;
+  paymentHash: string;
+  feeSats: number;
+  invoiceSats: number;
+}
+
 async function postFree(facilitatorUrl: string, endpoint: string, body: object): Promise<FreePostResponse> {
   const res = await fetch(`${facilitatorUrl}/free${endpoint}`, {
     method: "POST",
@@ -57,4 +64,20 @@ export async function submitProfileUpdateFree(
   params: { propertyKind: number; value: string; pubkey: string; sig: string },
 ): Promise<FreePostResponse> {
   return postFree(facilitatorUrl, "/profile", { ...params, protocolVersion: PROTOCOL_VERSION });
+}
+
+export async function sponsorTransaction(
+  facilitatorUrl: string,
+  testnetTxid: string,
+): Promise<InvoiceResponse> {
+  const res = await fetch(`${facilitatorUrl}/sponsor`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ testnetTxid, protocolVersion: PROTOCOL_VERSION }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ error: `Facilitator error: ${res.status}` }))) as { error: string };
+    throw new Error(err.error ?? `Facilitator error: ${res.status}`);
+  }
+  return res.json() as Promise<InvoiceResponse>;
 }

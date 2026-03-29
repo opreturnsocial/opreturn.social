@@ -12,6 +12,7 @@ import { registerQuoteRepostCommand } from "./commands/quote-repost.js";
 import { registerFollowCommand } from "./commands/follow.js";
 import { registerUnfollowCommand } from "./commands/unfollow.js";
 import { registerProfileCommand } from "./commands/profile.js";
+import { registerSponsorCommand } from "./commands/sponsor.js";
 
 const program = new Command();
 
@@ -25,7 +26,7 @@ program
       "    2. Config file (~/.ors/cli/config.json)\n\n" +
       "  Run '@opreturnsocial/cli setup --generate' to get started.",
   )
-  .version("0.2.1");
+  .version("0.3.0");
 
 registerSetupCommand(program);
 registerWhoamiCommand(program);
@@ -39,5 +40,6 @@ registerQuoteRepostCommand(program);
 registerFollowCommand(program);
 registerUnfollowCommand(program);
 registerProfileCommand(program);
+registerSponsorCommand(program);
 
 program.parse();
