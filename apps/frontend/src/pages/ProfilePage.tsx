@@ -36,6 +36,7 @@ import { RepostCard } from "../components/RepostCard";
 import { ActivityCard } from "../components/ActivityCard";
 import {
   fetchFeed,
+  fetchActivity,
   fetchFollows,
   fetchFollowers,
   fetchOgLeaderboard,
@@ -95,6 +96,7 @@ export function ProfilePage({
   const profileActivity = feedItems.flatMap((i) =>
     i.feedType === "activity" ? [i as ActivityItem] : [],
   );
+  const [profileUpdateItems, setProfileUpdateItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -151,15 +153,17 @@ export function ProfilePage({
     loadingRef.current = true;
     setHasMore(true);
     try {
-      const [feedData, followsData, followers, ogData, repData] =
+      const [feedData, activityData, followsData, followers, ogData, repData] =
         await Promise.all([
-          fetchFeed(20, 0, { pubkey }),
+          fetchFeed(20, 0, { pubkey, feedFilter: "all" }),
+          fetchActivity(50, 0, pubkey, "profile_update"),
           fetchFollows(pubkey),
           fetchFollowers(pubkey),
           fetchOgLeaderboard(),
           fetchRepLeaderboard(),
         ]);
       setFeedItems(feedData.items);
+      setProfileUpdateItems(activityData);
       setParentPosts(
         Object.fromEntries(feedData.parentPosts.map((p) => [p.txid, p])),
       );
@@ -209,7 +213,7 @@ export function ProfilePage({
         items: data,
         parentPosts: pp,
         parentActivities: pa,
-      } = await fetchFeed(20, offset, { pubkey });
+      } = await fetchFeed(20, offset, { pubkey, feedFilter: "all" });
       if (data.length < 20) {
         hasMoreRef.current = false;
         setHasMore(false);
@@ -421,18 +425,16 @@ export function ProfilePage({
             0: "Name",
             1: "Avatar URL",
             2: "Bio",
+            4: "Bot",
           };
           const profileFieldTxids = new Map<number, ActivityItem>();
-          for (const item of profileActivity) {
+          for (const item of profileUpdateItems) {
             if (
               item.type === "profile_update" &&
               item.propertyKind !== undefined
             ) {
               const existing = profileFieldTxids.get(item.propertyKind);
-              if (
-                !existing ||
-                (item.network === "mainnet" && existing.network !== "mainnet")
-              ) {
+              if (!existing || item.timestamp > existing.timestamp) {
                 profileFieldTxids.set(item.propertyKind, item);
               }
             }

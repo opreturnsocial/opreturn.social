@@ -53,9 +53,10 @@ export async function fetchActivityItem(txid: string): Promise<ActivityItem> {
   return res.json() as Promise<ActivityItem>;
 }
 
-export async function fetchActivity(limit = 50, offset = 0, pubkey?: string): Promise<ActivityItem[]> {
+export async function fetchActivity(limit = 50, offset = 0, pubkey?: string, type?: string): Promise<ActivityItem[]> {
   let url = `${BASE_URL}/activity?limit=${limit}&offset=${offset}`;
   if (pubkey) url += `&pubkey=${pubkey}`;
+  if (type) url += `&type=${encodeURIComponent(type)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
   const data = (await res.json()) as { items: ActivityItem[] };
