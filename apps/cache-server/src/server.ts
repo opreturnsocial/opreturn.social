@@ -300,7 +300,7 @@ export function createServer() {
         await prisma.profile.upsert({
           where: { pubkey_network: { pubkey, network } },
           create: { pubkey, network, ...data, status: "pending" },
-          update: { ...data, status: "pending" },
+          update: { ...data },
         });
         await prisma.profileUpdateEvent.upsert({
           where: { txid_network: { txid, network } },
@@ -319,7 +319,6 @@ export function createServer() {
             sig,
             blockHeight: block_height ?? 0,
             timestamp: timestamp ?? Math.floor(Date.now() / 1000),
-            status: "pending",
           },
         });
       }
@@ -353,7 +352,6 @@ export function createServer() {
           timestamp: timestamp ?? Math.floor(Date.now() / 1000),
           blockHeight: block_height ?? 0,
           txid,
-          status: "pending",
         },
       });
     } else {
