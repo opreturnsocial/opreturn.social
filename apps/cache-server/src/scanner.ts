@@ -255,8 +255,14 @@ async function scanBlock(
         );
       } else if (result.post.kind === KIND_PROFILE_UPDATE) {
         const update = result.post as OrsProfileUpdate;
-        const data: { name?: string; avatarUrl?: string; bio?: string; bot?: boolean } = {};
-        if (update.propertyKind === PROFILE_PROPERTY_NAME) data.name = update.content;
+        const data: {
+          name?: string;
+          avatarUrl?: string;
+          bio?: string;
+          bot?: boolean;
+        } = {};
+        if (update.propertyKind === PROFILE_PROPERTY_NAME)
+          data.name = update.content;
         else if (update.propertyKind === PROFILE_PROPERTY_AVATAR_URL)
           data.avatarUrl = update.content;
         else if (update.propertyKind === PROFILE_PROPERTY_BIO)
@@ -614,7 +620,8 @@ async function storeV1Post(
     const propertyKind = kindData[0];
     const valueBytes = kindData.subarray(1);
     const data: { name?: string; avatarUrl?: string; bio?: string } = {};
-    if (propertyKind === PROFILE_PROPERTY_NAME) data.name = new TextDecoder().decode(valueBytes);
+    if (propertyKind === PROFILE_PROPERTY_NAME)
+      data.name = new TextDecoder().decode(valueBytes);
     else if (propertyKind === PROFILE_PROPERTY_AVATAR_URL)
       data.avatarUrl = new TextDecoder().decode(valueBytes);
     else if (propertyKind === PROFILE_PROPERTY_BIO)
@@ -781,7 +788,8 @@ async function runScanCycle(network: string, rpc: RpcClient): Promise<void> {
       await scanBlock(height, network, rpc);
       await assembleV1Chunks(height, network);
     }
-    await checkMempoolEvictions(network, rpc);
+    // FIXME: this is incorrectly evicting confirmed posts and profile updates
+    //await checkMempoolEvictions(network, rpc);
   } catch (err) {
     console.error(`[scanner:${network}] Error during scan cycle:`, err);
   }
