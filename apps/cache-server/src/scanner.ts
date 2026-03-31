@@ -737,7 +737,7 @@ async function assembleV1Chunks(
       if (!valid) continue;
 
       // Free network mainnet-activity gate for v1 assembled posts
-      if (network !== "mainnet") {
+      /*if (network !== "mainnet") {
         const pubkeyHex = bytesToHex(assembled.pubkey);
         const active = await hasMainnetActivity(pubkeyHex);
         if (!active) {
@@ -746,7 +746,7 @@ async function assembleV1Chunks(
           );
           break;
         }
-      }
+      }*/
 
       await storeV1Post(
         c0.txid,
