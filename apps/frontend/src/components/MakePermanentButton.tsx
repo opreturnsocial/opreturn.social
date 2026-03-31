@@ -145,7 +145,7 @@ export function MakePermanentButton({
     try {
       const version = getProtocolVersion();
 
-      let v0Unsigned: Uint8Array<ArrayBuffer>;
+      let v0Unsigned: Uint8Array;
       switch (actionType) {
         case "post":
           v0Unsigned = buildUnsignedPayload(content!, pubkey);

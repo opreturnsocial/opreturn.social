@@ -5,6 +5,7 @@ import {
   parseV1Chunk,
   assembleV1Body,
   buildV1SigningBody,
+  bytesToHex,
   KIND_TEXT_NOTE,
   KIND_PROFILE_UPDATE,
   KIND_TEXT_REPLY,
@@ -111,7 +112,7 @@ async function scanBlock(
             network,
             chunkNum: chunk.chunkNum,
             totalChunks: chunk.totalChunks ?? null,
-            bodySlice: chunk.bodySlice.toString("hex"),
+            bodySlice: bytesToHex(chunk.bodySlice),
             blockHeight: height,
             timestamp: block.time,
           },
@@ -519,15 +520,15 @@ async function checkMempoolEvictions(
 async function storeV1Post(
   txid: string,
   network: string,
-  pubkey: Buffer,
-  sig: Buffer,
+  pubkey: Uint8Array,
+  sig: Uint8Array,
   kind: number,
-  kindData: Buffer,
+  kindData: Uint8Array,
   blockHeight: number,
   timestamp: number,
 ): Promise<void> {
-  const pubkeyHex = pubkey.toString("hex");
-  const sigHex = sig.toString("hex");
+  const pubkeyHex = bytesToHex(pubkey);
+  const sigHex = bytesToHex(sig);
 
   if (kind === KIND_TEXT_NOTE) {
     await prisma.post.upsert({
@@ -537,7 +538,7 @@ async function storeV1Post(
         network,
         blockHeight,
         timestamp,
-        content: kindData.toString("utf8"),
+        content: new TextDecoder().decode(kindData),
         kind,
         pubkey: pubkeyHex,
         sig: sigHex,
@@ -548,8 +549,8 @@ async function storeV1Post(
     console.log(`[scanner:${network}] v1 assembled TEXT_NOTE ${txid}`);
   } else if (kind === KIND_TEXT_REPLY) {
     if (kindData.length < 32) return;
-    const parentTxid = kindData.subarray(0, 32).toString("hex");
-    const content = kindData.subarray(32).toString("utf8");
+    const parentTxid = bytesToHex(kindData.subarray(0, 32));
+    const content = new TextDecoder().decode(kindData.subarray(32));
     await prisma.post.upsert({
       where: { txid_network: { txid, network } },
       create: {
@@ -569,7 +570,7 @@ async function storeV1Post(
     console.log(`[scanner:${network}] v1 assembled TEXT_REPLY ${txid}`);
   } else if (kind === KIND_REPOST) {
     if (kindData.length < 32) return;
-    const parentTxid = kindData.subarray(0, 32).toString("hex");
+    const parentTxid = bytesToHex(kindData.subarray(0, 32));
     await prisma.post.upsert({
       where: { txid_network: { txid, network } },
       create: {
@@ -589,8 +590,8 @@ async function storeV1Post(
     console.log(`[scanner:${network}] v1 assembled REPOST ${txid}`);
   } else if (kind === KIND_QUOTE_REPOST) {
     if (kindData.length < 32) return;
-    const parentTxid = kindData.subarray(0, 32).toString("hex");
-    const content = kindData.subarray(32).toString("utf8");
+    const parentTxid = bytesToHex(kindData.subarray(0, 32));
+    const content = new TextDecoder().decode(kindData.subarray(32));
     await prisma.post.upsert({
       where: { txid_network: { txid, network } },
       create: {
@@ -613,13 +614,13 @@ async function storeV1Post(
     const propertyKind = kindData[0];
     const valueBytes = kindData.subarray(1);
     const data: { name?: string; avatarUrl?: string; bio?: string } = {};
-    if (propertyKind === PROFILE_PROPERTY_NAME) data.name = valueBytes.toString("utf8");
+    if (propertyKind === PROFILE_PROPERTY_NAME) data.name = new TextDecoder().decode(valueBytes);
     else if (propertyKind === PROFILE_PROPERTY_AVATAR_URL)
-      data.avatarUrl = valueBytes.toString("utf8");
+      data.avatarUrl = new TextDecoder().decode(valueBytes);
     else if (propertyKind === PROFILE_PROPERTY_BIO)
-      data.bio = valueBytes.toString("utf8");
+      data.bio = new TextDecoder().decode(valueBytes);
     if (Object.keys(data).length > 0) {
-      const valueStr = valueBytes.toString("utf8");
+      const valueStr = new TextDecoder().decode(valueBytes);
       await prisma.profile.upsert({
         where: { pubkey_network: { pubkey: pubkeyHex, network } },
         create: { pubkey: pubkeyHex, network, ...data, status: "confirmed" },
@@ -645,7 +646,7 @@ async function storeV1Post(
     }
   } else if (kind === KIND_FOLLOW) {
     if (kindData.length < 33) return;
-    const targetPubkey = kindData.subarray(0, 32).toString("hex");
+    const targetPubkey = bytesToHex(kindData.subarray(0, 32));
     const isFollow = kindData[32] === 0x01;
     await prisma.follow.upsert({
       where: {
@@ -701,7 +702,7 @@ async function assembleV1Chunks(
 
   for (const c0 of chunk0s) {
     const totalChunks = c0.totalChunks!;
-    const candidates: Buffer[][] = [[Buffer.from(c0.bodySlice, "hex")]];
+    const candidates: Uint8Array[][] = [[Buffer.from(c0.bodySlice, "hex")]];
     for (let n = 1; n < totalChunks; n++) {
       const cands = windowChunks
         .filter((c) => c.chunkNum === n)
@@ -730,7 +731,7 @@ async function assembleV1Chunks(
 
       // Free network mainnet-activity gate for v1 assembled posts
       if (network !== "mainnet") {
-        const pubkeyHex = Buffer.from(assembled.pubkey).toString("hex");
+        const pubkeyHex = bytesToHex(assembled.pubkey);
         const active = await hasMainnetActivity(pubkeyHex);
         if (!active) {
           console.log(
@@ -753,7 +754,7 @@ async function assembleV1Chunks(
 
       const assembledTxids = [c0.txid];
       for (let n = 1; n < totalChunks; n++) {
-        const sliceHex = combo[n].toString("hex");
+        const sliceHex = bytesToHex(combo[n]);
         const matched = windowChunks.find(
           (c) => c.chunkNum === n && c.bodySlice === sliceHex,
         );

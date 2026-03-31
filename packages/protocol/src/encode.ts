@@ -1,6 +1,6 @@
 import {
   ORS_MAGIC,
-  ORS_VERSION,
+  ORS_VERSION_V0,
   ORS_VERSION_V1,
   KIND_TEXT_NOTE,
   KIND_PROFILE_UPDATE,
@@ -17,17 +17,21 @@ import {
   V1_CHUNK0_DATA,
   V1_CHUNKN_DATA,
 } from "./types.js";
+import { concatBytes } from "./helpers.js";
 
 /**
  * Build the unsigned payload for a TEXT_NOTE — everything that gets hashed and signed.
  * Format: ORS\x00 + pubkey(32) + kind(1) + content_bytes  (no sig)
  */
-export function buildUnsignedPayload(content: string, pubkey: Buffer): Buffer {
+export function buildUnsignedPayload(
+  content: string,
+  pubkey: Uint8Array,
+): Uint8Array {
   if (pubkey.length !== PUBKEY_BYTES) {
     throw new Error(`pubkey must be ${PUBKEY_BYTES} bytes`);
   }
 
-  const contentBytes = Buffer.from(content, "utf8");
+  const contentBytes = new TextEncoder().encode(content);
   if (contentBytes.length > MAX_CONTENT_BYTES) {
     throw new Error(
       `Content too long: ${contentBytes.length} bytes (max ${MAX_CONTENT_BYTES})`,
@@ -37,20 +41,20 @@ export function buildUnsignedPayload(content: string, pubkey: Buffer): Buffer {
   // SIG_OFFSET (36) = magic(3) + version(1) + pubkey(32)
   // kind: 1 byte
   // content: raw bytes
-  const buf = Buffer.alloc(SIG_OFFSET + 1 + contentBytes.length);
+  const buf = new Uint8Array(SIG_OFFSET + 1 + contentBytes.length);
   let pos = 0;
 
-  ORS_MAGIC.copy(buf, pos);
+  buf.set(ORS_MAGIC, pos);
   pos += 3;
-  buf[pos++] = ORS_VERSION;
+  buf[pos++] = ORS_VERSION_V0;
 
-  pubkey.copy(buf, pos);
+  buf.set(pubkey, pos);
   pos += PUBKEY_BYTES;
 
   // kind byte at offset 36 of unsigned (= offset 100 of full payload)
   buf[pos++] = KIND_TEXT_NOTE;
 
-  contentBytes.copy(buf, pos);
+  buf.set(contentBytes, pos);
 
   return buf;
 }
@@ -61,36 +65,35 @@ export function buildUnsignedPayload(content: string, pubkey: Buffer): Buffer {
  */
 export function buildProfileUpdateUnsignedPayload(
   propertyKind: number,
-  value: string | Buffer,
-  pubkey: Buffer,
-): Buffer {
+  value: string | Uint8Array,
+  pubkey: Uint8Array,
+): Uint8Array {
   if (pubkey.length !== PUBKEY_BYTES) {
     throw new Error(`pubkey must be ${PUBKEY_BYTES} bytes`);
   }
 
-  const valueBytes = Buffer.isBuffer(value)
-    ? value
-    : Buffer.from(value, "utf8");
+  const valueBytes =
+    value instanceof Uint8Array ? value : new TextEncoder().encode(value);
 
   // SIG_OFFSET (36) = magic(3) + version(1) + pubkey(32)
   // kind: 1 byte
   // propertyKind: 1 byte
   // value: raw bytes
-  const buf = Buffer.alloc(SIG_OFFSET + 1 + 1 + valueBytes.length);
+  const buf = new Uint8Array(SIG_OFFSET + 1 + 1 + valueBytes.length);
   let pos = 0;
 
-  ORS_MAGIC.copy(buf, pos);
+  buf.set(ORS_MAGIC, pos);
   pos += 3;
-  buf[pos++] = ORS_VERSION;
+  buf[pos++] = ORS_VERSION_V0;
 
-  pubkey.copy(buf, pos);
+  buf.set(pubkey, pos);
   pos += PUBKEY_BYTES;
 
   // kind byte at offset 36 of unsigned (= offset 100 of full payload)
   buf[pos++] = KIND_PROFILE_UPDATE;
 
   buf[pos++] = propertyKind;
-  valueBytes.copy(buf, pos);
+  buf.set(valueBytes, pos);
 
   return buf;
 }
@@ -101,9 +104,9 @@ export function buildProfileUpdateUnsignedPayload(
  */
 export function buildReplyUnsignedPayload(
   content: string,
-  pubkey: Buffer,
-  parentTxidBytes: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+  parentTxidBytes: Uint8Array,
+): Uint8Array {
   if (pubkey.length !== PUBKEY_BYTES) {
     throw new Error(`pubkey must be ${PUBKEY_BYTES} bytes`);
   }
@@ -111,30 +114,30 @@ export function buildReplyUnsignedPayload(
     throw new Error(`parentTxid must be ${PARENT_TXID_BYTES} bytes`);
   }
 
-  const contentBytes = Buffer.from(content, "utf8");
+  const contentBytes = new TextEncoder().encode(content);
   if (contentBytes.length > MAX_CONTENT_BYTES) {
     throw new Error(
       `Content too long: ${contentBytes.length} bytes (max ${MAX_CONTENT_BYTES})`,
     );
   }
 
-  const buf = Buffer.alloc(
+  const buf = new Uint8Array(
     SIG_OFFSET + 1 + PARENT_TXID_BYTES + contentBytes.length,
   );
   let pos = 0;
 
-  ORS_MAGIC.copy(buf, pos);
+  buf.set(ORS_MAGIC, pos);
   pos += 3;
-  buf[pos++] = ORS_VERSION;
+  buf[pos++] = ORS_VERSION_V0;
 
-  pubkey.copy(buf, pos);
+  buf.set(pubkey, pos);
   pos += PUBKEY_BYTES;
 
   buf[pos++] = KIND_TEXT_REPLY;
 
-  parentTxidBytes.copy(buf, pos);
+  buf.set(parentTxidBytes, pos);
   pos += PARENT_TXID_BYTES;
-  contentBytes.copy(buf, pos);
+  buf.set(contentBytes, pos);
 
   return buf;
 }
@@ -145,20 +148,20 @@ export function buildReplyUnsignedPayload(
  */
 export function buildReplyPayload(
   content: string,
-  pubkey: Buffer,
-  sig: Buffer,
-  parentTxidBytes: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+  sig: Uint8Array,
+  parentTxidBytes: Uint8Array,
+): Uint8Array {
   if (sig.length !== SIG_BYTES) {
     throw new Error(`sig must be ${SIG_BYTES} bytes`);
   }
 
   const unsigned = buildReplyUnsignedPayload(content, pubkey, parentTxidBytes);
 
-  const buf = Buffer.alloc(unsigned.length + SIG_BYTES);
-  unsigned.subarray(0, SIG_OFFSET).copy(buf, 0);
-  sig.copy(buf, SIG_OFFSET);
-  unsigned.subarray(SIG_OFFSET).copy(buf, KIND_OFFSET);
+  const buf = new Uint8Array(unsigned.length + SIG_BYTES);
+  buf.set(unsigned.subarray(0, SIG_OFFSET), 0);
+  buf.set(sig, SIG_OFFSET);
+  buf.set(unsigned.subarray(SIG_OFFSET), KIND_OFFSET);
 
   return buf;
 }
@@ -168,9 +171,9 @@ export function buildReplyPayload(
  * Format: ORS\x00 + pubkey(32) + kind(1=0x04) + referencedTxid(32)  (no sig)
  */
 export function buildRepostUnsignedPayload(
-  pubkey: Buffer,
-  referencedTxidBytes: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+  referencedTxidBytes: Uint8Array,
+): Uint8Array {
   if (pubkey.length !== PUBKEY_BYTES) {
     throw new Error(`pubkey must be ${PUBKEY_BYTES} bytes`);
   }
@@ -178,19 +181,19 @@ export function buildRepostUnsignedPayload(
     throw new Error(`referencedTxid must be ${PARENT_TXID_BYTES} bytes`);
   }
 
-  const buf = Buffer.alloc(SIG_OFFSET + 1 + PARENT_TXID_BYTES);
+  const buf = new Uint8Array(SIG_OFFSET + 1 + PARENT_TXID_BYTES);
   let pos = 0;
 
-  ORS_MAGIC.copy(buf, pos);
+  buf.set(ORS_MAGIC, pos);
   pos += 3;
-  buf[pos++] = ORS_VERSION;
+  buf[pos++] = ORS_VERSION_V0;
 
-  pubkey.copy(buf, pos);
+  buf.set(pubkey, pos);
   pos += PUBKEY_BYTES;
 
   buf[pos++] = KIND_REPOST;
 
-  referencedTxidBytes.copy(buf, pos);
+  buf.set(referencedTxidBytes, pos);
 
   return buf;
 }
@@ -200,20 +203,20 @@ export function buildRepostUnsignedPayload(
  * Format: ORS\x00 + pubkey(32) + sig(64) + kind(1=0x04) + referencedTxid(32)
  */
 export function buildRepostPayload(
-  pubkey: Buffer,
-  sig: Buffer,
-  referencedTxidBytes: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+  sig: Uint8Array,
+  referencedTxidBytes: Uint8Array,
+): Uint8Array {
   if (sig.length !== SIG_BYTES) {
     throw new Error(`sig must be ${SIG_BYTES} bytes`);
   }
 
   const unsigned = buildRepostUnsignedPayload(pubkey, referencedTxidBytes);
 
-  const buf = Buffer.alloc(unsigned.length + SIG_BYTES);
-  unsigned.subarray(0, SIG_OFFSET).copy(buf, 0);
-  sig.copy(buf, SIG_OFFSET);
-  unsigned.subarray(SIG_OFFSET).copy(buf, KIND_OFFSET);
+  const buf = new Uint8Array(unsigned.length + SIG_BYTES);
+  buf.set(unsigned.subarray(0, SIG_OFFSET), 0);
+  buf.set(sig, SIG_OFFSET);
+  buf.set(unsigned.subarray(SIG_OFFSET), KIND_OFFSET);
 
   return buf;
 }
@@ -224,9 +227,9 @@ export function buildRepostPayload(
  */
 export function buildQuoteRepostUnsignedPayload(
   content: string,
-  pubkey: Buffer,
-  referencedTxidBytes: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+  referencedTxidBytes: Uint8Array,
+): Uint8Array {
   if (pubkey.length !== PUBKEY_BYTES) {
     throw new Error(`pubkey must be ${PUBKEY_BYTES} bytes`);
   }
@@ -234,30 +237,30 @@ export function buildQuoteRepostUnsignedPayload(
     throw new Error(`referencedTxid must be ${PARENT_TXID_BYTES} bytes`);
   }
 
-  const contentBytes = Buffer.from(content, "utf8");
+  const contentBytes = new TextEncoder().encode(content);
   if (contentBytes.length > MAX_CONTENT_BYTES) {
     throw new Error(
       `Content too long: ${contentBytes.length} bytes (max ${MAX_CONTENT_BYTES})`,
     );
   }
 
-  const buf = Buffer.alloc(
+  const buf = new Uint8Array(
     SIG_OFFSET + 1 + PARENT_TXID_BYTES + contentBytes.length,
   );
   let pos = 0;
 
-  ORS_MAGIC.copy(buf, pos);
+  buf.set(ORS_MAGIC, pos);
   pos += 3;
-  buf[pos++] = ORS_VERSION;
+  buf[pos++] = ORS_VERSION_V0;
 
-  pubkey.copy(buf, pos);
+  buf.set(pubkey, pos);
   pos += PUBKEY_BYTES;
 
   buf[pos++] = KIND_QUOTE_REPOST;
 
-  referencedTxidBytes.copy(buf, pos);
+  buf.set(referencedTxidBytes, pos);
   pos += PARENT_TXID_BYTES;
-  contentBytes.copy(buf, pos);
+  buf.set(contentBytes, pos);
 
   return buf;
 }
@@ -268,10 +271,10 @@ export function buildQuoteRepostUnsignedPayload(
  */
 export function buildQuoteRepostPayload(
   content: string,
-  pubkey: Buffer,
-  sig: Buffer,
-  referencedTxidBytes: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+  sig: Uint8Array,
+  referencedTxidBytes: Uint8Array,
+): Uint8Array {
   if (sig.length !== SIG_BYTES) {
     throw new Error(`sig must be ${SIG_BYTES} bytes`);
   }
@@ -282,10 +285,10 @@ export function buildQuoteRepostPayload(
     referencedTxidBytes,
   );
 
-  const buf = Buffer.alloc(unsigned.length + SIG_BYTES);
-  unsigned.subarray(0, SIG_OFFSET).copy(buf, 0);
-  sig.copy(buf, SIG_OFFSET);
-  unsigned.subarray(SIG_OFFSET).copy(buf, KIND_OFFSET);
+  const buf = new Uint8Array(unsigned.length + SIG_BYTES);
+  buf.set(unsigned.subarray(0, SIG_OFFSET), 0);
+  buf.set(sig, SIG_OFFSET);
+  buf.set(unsigned.subarray(SIG_OFFSET), KIND_OFFSET);
 
   return buf;
 }
@@ -295,10 +298,10 @@ export function buildQuoteRepostPayload(
  * Format: ORS\x00 + pubkey(32) + kind(1=0x06) + targetPubkey(32) + action(1)
  */
 export function buildFollowUnsignedPayload(
-  targetPubkey: Buffer,
+  targetPubkey: Uint8Array,
   isFollow: boolean,
-  pubkey: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+): Uint8Array {
   if (pubkey.length !== PUBKEY_BYTES) {
     throw new Error(`pubkey must be ${PUBKEY_BYTES} bytes`);
   }
@@ -306,19 +309,19 @@ export function buildFollowUnsignedPayload(
     throw new Error(`targetPubkey must be ${PUBKEY_BYTES} bytes`);
   }
 
-  const buf = Buffer.alloc(SIG_OFFSET + 1 + PUBKEY_BYTES + 1);
+  const buf = new Uint8Array(SIG_OFFSET + 1 + PUBKEY_BYTES + 1);
   let pos = 0;
 
-  ORS_MAGIC.copy(buf, pos);
+  buf.set(ORS_MAGIC, pos);
   pos += 3;
-  buf[pos++] = ORS_VERSION;
+  buf[pos++] = ORS_VERSION_V0;
 
-  pubkey.copy(buf, pos);
+  buf.set(pubkey, pos);
   pos += PUBKEY_BYTES;
 
   buf[pos++] = KIND_FOLLOW;
 
-  targetPubkey.copy(buf, pos);
+  buf.set(targetPubkey, pos);
   pos += PUBKEY_BYTES;
   buf[pos] = isFollow ? 0x01 : 0x00;
 
@@ -330,21 +333,21 @@ export function buildFollowUnsignedPayload(
  * Format: ORS\x00 + pubkey(32) + sig(64) + kind(1=0x06) + targetPubkey(32) + action(1)
  */
 export function buildFollowPayload(
-  targetPubkey: Buffer,
+  targetPubkey: Uint8Array,
   isFollow: boolean,
-  pubkey: Buffer,
-  sig: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+  sig: Uint8Array,
+): Uint8Array {
   if (sig.length !== SIG_BYTES) {
     throw new Error(`sig must be ${SIG_BYTES} bytes`);
   }
 
   const unsigned = buildFollowUnsignedPayload(targetPubkey, isFollow, pubkey);
 
-  const buf = Buffer.alloc(unsigned.length + SIG_BYTES);
-  unsigned.subarray(0, SIG_OFFSET).copy(buf, 0);
-  sig.copy(buf, SIG_OFFSET);
-  unsigned.subarray(SIG_OFFSET).copy(buf, KIND_OFFSET);
+  const buf = new Uint8Array(unsigned.length + SIG_BYTES);
+  buf.set(unsigned.subarray(0, SIG_OFFSET), 0);
+  buf.set(sig, SIG_OFFSET);
+  buf.set(unsigned.subarray(SIG_OFFSET), KIND_OFFSET);
 
   return buf;
 }
@@ -353,11 +356,11 @@ export function buildFollowPayload(
  * Extract the unsigned bytes from a full on-chain payload (for verification).
  * Removes the 64-byte sig at offset SIG_OFFSET..KIND_OFFSET.
  */
-export function getUnsignedBytes(fullPayload: Buffer): Buffer {
-  return Buffer.concat([
+export function getUnsignedBytes(fullPayload: Uint8Array): Uint8Array {
+  return concatBytes(
     fullPayload.subarray(0, SIG_OFFSET),
     fullPayload.subarray(KIND_OFFSET),
-  ]);
+  );
 }
 
 /**
@@ -366,9 +369,9 @@ export function getUnsignedBytes(fullPayload: Buffer): Buffer {
  */
 export function buildORSPayload(
   content: string,
-  pubkey: Buffer,
-  sig: Buffer,
-): Buffer {
+  pubkey: Uint8Array,
+  sig: Uint8Array,
+): Uint8Array {
   if (sig.length !== SIG_BYTES) {
     throw new Error(`sig must be ${SIG_BYTES} bytes`);
   }
@@ -376,10 +379,10 @@ export function buildORSPayload(
   const unsigned = buildUnsignedPayload(content, pubkey);
 
   // Insert sig between header (SIG_OFFSET) and kind+data
-  const buf = Buffer.alloc(unsigned.length + SIG_BYTES);
-  unsigned.subarray(0, SIG_OFFSET).copy(buf, 0);
-  sig.copy(buf, SIG_OFFSET);
-  unsigned.subarray(SIG_OFFSET).copy(buf, KIND_OFFSET);
+  const buf = new Uint8Array(unsigned.length + SIG_BYTES);
+  buf.set(unsigned.subarray(0, SIG_OFFSET), 0);
+  buf.set(sig, SIG_OFFSET);
+  buf.set(unsigned.subarray(SIG_OFFSET), KIND_OFFSET);
 
   return buf;
 }
@@ -391,11 +394,15 @@ export function buildORSPayload(
  * This is what gets sha256-hashed and Schnorr-signed for v1 posts.
  * No magic or version prefix — saves bytes in the signing scope.
  */
-export function buildV1SigningBody(pubkey: Buffer, kind: number, kindData: Buffer): Buffer {
-  const buf = Buffer.alloc(PUBKEY_BYTES + 1 + kindData.length);
-  pubkey.copy(buf, 0);
+export function buildV1SigningBody(
+  pubkey: Uint8Array,
+  kind: number,
+  kindData: Uint8Array,
+): Uint8Array {
+  const buf = new Uint8Array(PUBKEY_BYTES + 1 + kindData.length);
+  buf.set(pubkey, 0);
   buf[PUBKEY_BYTES] = kind;
-  kindData.copy(buf, PUBKEY_BYTES + 1);
+  buf.set(kindData, PUBKEY_BYTES + 1);
   return buf;
 }
 
@@ -409,25 +416,34 @@ export function buildV1SigningBody(pubkey: Buffer, kind: number, kindData: Buffe
  *
  * Returns an array of OP_RETURN payloads (without OP_RETURN opcode), each <= 80 bytes.
  */
-export function buildV1Chunks(pubkey: Buffer, sig: Buffer, kind: number, kindData: Buffer): Buffer[] {
-  if (pubkey.length !== PUBKEY_BYTES) throw new Error(`pubkey must be ${PUBKEY_BYTES} bytes`);
-  if (sig.length !== SIG_BYTES) throw new Error(`sig must be ${SIG_BYTES} bytes`);
+export function buildV1Chunks(
+  pubkey: Uint8Array,
+  sig: Uint8Array,
+  kind: number,
+  kindData: Uint8Array,
+): Uint8Array[] {
+  if (pubkey.length !== PUBKEY_BYTES)
+    throw new Error(`pubkey must be ${PUBKEY_BYTES} bytes`);
+  if (sig.length !== SIG_BYTES)
+    throw new Error(`sig must be ${SIG_BYTES} bytes`);
 
-  const body = Buffer.concat([pubkey, sig, Buffer.from([kind]), kindData]);
+  const body = concatBytes(pubkey, sig, new Uint8Array([kind]), kindData);
 
-  const numNonRootChunks = Math.ceil(Math.max(0, body.length - V1_CHUNK0_DATA) / V1_CHUNKN_DATA);
+  const numNonRootChunks = Math.ceil(
+    Math.max(0, body.length - V1_CHUNK0_DATA) / V1_CHUNKN_DATA,
+  );
   const totalChunks = 1 + numNonRootChunks;
 
-  const chunks: Buffer[] = [];
+  const chunks: Uint8Array[] = [];
 
   // Chunk 0
   const chunk0Body = body.subarray(0, V1_CHUNK0_DATA);
-  const chunk0 = Buffer.alloc(6 + chunk0Body.length);
-  ORS_MAGIC.copy(chunk0, 0);
+  const chunk0 = new Uint8Array(6 + chunk0Body.length);
+  chunk0.set(ORS_MAGIC, 0);
   chunk0[3] = ORS_VERSION_V1;
   chunk0[4] = 0x00;
   chunk0[5] = totalChunks;
-  chunk0Body.copy(chunk0, 6);
+  chunk0.set(chunk0Body, 6);
   chunks.push(chunk0);
 
   // Chunks 1..N
@@ -435,11 +451,11 @@ export function buildV1Chunks(pubkey: Buffer, sig: Buffer, kind: number, kindDat
     const start = V1_CHUNK0_DATA + (n - 1) * V1_CHUNKN_DATA;
     const end = Math.min(start + V1_CHUNKN_DATA, body.length);
     const slice = body.subarray(start, end);
-    const chunk = Buffer.alloc(5 + slice.length);
-    ORS_MAGIC.copy(chunk, 0);
+    const chunk = new Uint8Array(5 + slice.length);
+    chunk.set(ORS_MAGIC, 0);
     chunk[3] = ORS_VERSION_V1;
     chunk[4] = n;
-    slice.copy(chunk, 5);
+    chunk.set(slice, 5);
     chunks.push(chunk);
   }
 
@@ -452,10 +468,10 @@ export function buildV1Chunks(pubkey: Buffer, sig: Buffer, kind: number, kindDat
  */
 export function buildProfileUpdatePayload(
   propertyKind: number,
-  value: string | Buffer,
-  pubkey: Buffer,
-  sig: Buffer,
-): Buffer {
+  value: string | Uint8Array,
+  pubkey: Uint8Array,
+  sig: Uint8Array,
+): Uint8Array {
   if (sig.length !== SIG_BYTES) {
     throw new Error(`sig must be ${SIG_BYTES} bytes`);
   }
@@ -466,10 +482,10 @@ export function buildProfileUpdatePayload(
     pubkey,
   );
 
-  const buf = Buffer.alloc(unsigned.length + SIG_BYTES);
-  unsigned.subarray(0, SIG_OFFSET).copy(buf, 0);
-  sig.copy(buf, SIG_OFFSET);
-  unsigned.subarray(SIG_OFFSET).copy(buf, KIND_OFFSET);
+  const buf = new Uint8Array(unsigned.length + SIG_BYTES);
+  buf.set(unsigned.subarray(0, SIG_OFFSET), 0);
+  buf.set(sig, SIG_OFFSET);
+  buf.set(unsigned.subarray(SIG_OFFSET), KIND_OFFSET);
 
   return buf;
 }

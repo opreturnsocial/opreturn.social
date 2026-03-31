@@ -51,7 +51,7 @@ export function RepostModal({
       const pubkey = loggedInPubkey;
       const version = getProtocolVersion();
 
-      let v0Unsigned: Uint8Array<ArrayBuffer>;
+      let v0Unsigned: Uint8Array;
       if (isQuote) {
         v0Unsigned = buildQuoteRepostUnsignedPayload(
           quote.trim(),

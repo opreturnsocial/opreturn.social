@@ -207,15 +207,15 @@ export function createServer() {
     try {
       const pubkeyBuf = Buffer.from(pubkey, "hex");
       const sigBuf = Buffer.from(sig, "hex");
-      let unsigned: Buffer;
+      let unsigned: Uint8Array;
       if (
         kind === KIND_PROFILE_UPDATE &&
         typeof propertyKind === "number" &&
         value !== undefined
       ) {
-        const profileValue: string | Buffer =
+        const profileValue: string | Uint8Array =
           propertyKind === PROFILE_PROPERTY_BOT
-            ? Buffer.from([value === "true" ? 0x01 : 0x00])
+            ? new Uint8Array([value === "true" ? 0x01 : 0x00])
             : value;
         unsigned = buildProfileUpdateUnsignedPayload(
           propertyKind,

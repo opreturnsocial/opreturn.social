@@ -15,6 +15,7 @@ import {
   buildFollowUnsignedPayload,
   buildV1SigningBody,
   buildV1Chunks,
+  bytesToHex,
   KIND_TEXT_NOTE,
   KIND_PROFILE_UPDATE,
   KIND_TEXT_REPLY,
@@ -46,7 +47,7 @@ export function buildPayload(content: string, pubkey: string, sig: string): stri
   const unsignedPayload = buildUnsignedPayload(content, Buffer.from(pubkey, "hex"));
   verifySchnorr(unsignedPayload, pubkey, sig);
   const payload = buildORSPayload(content, Buffer.from(pubkey, "hex"), Buffer.from(sig, "hex"));
-  return payload.toString("hex");
+  return bytesToHex(payload);
 }
 
 export function buildPayloadReply(
@@ -64,7 +65,7 @@ export function buildPayloadReply(
     Buffer.from(sig, "hex"),
     parentTxidBytes
   );
-  return payload.toString("hex");
+  return bytesToHex(payload);
 }
 
 export function buildPayloadRepost(pubkey: string, sig: string, referencedTxid: string): string {
@@ -76,7 +77,7 @@ export function buildPayloadRepost(pubkey: string, sig: string, referencedTxid: 
     Buffer.from(sig, "hex"),
     referencedTxidBytes
   );
-  return payload.toString("hex");
+  return bytesToHex(payload);
 }
 
 export function buildPayloadQuoteRepost(
@@ -94,7 +95,7 @@ export function buildPayloadQuoteRepost(
     Buffer.from(sig, "hex"),
     referencedTxidBytes
   );
-  return payload.toString("hex");
+  return bytesToHex(payload);
 }
 
 export function buildPayloadFollow(
@@ -108,7 +109,7 @@ export function buildPayloadFollow(
   const unsignedPayload = buildFollowUnsignedPayload(targetPubkeyBuf, isFollow, pubkeyBuf);
   verifySchnorr(unsignedPayload, pubkey, sig);
   const payload = buildFollowPayload(targetPubkeyBuf, isFollow, pubkeyBuf, Buffer.from(sig, "hex"));
-  return payload.toString("hex");
+  return bytesToHex(payload);
 }
 
 export function buildPayloadProfile(
@@ -129,7 +130,7 @@ export function buildPayloadProfile(
     Buffer.from(pubkey, "hex"),
     Buffer.from(sig, "hex")
   );
-  return payload.toString("hex");
+  return bytesToHex(payload);
 }
 
 // ─── v1 (chunked 80-byte OP_RETURN) ─────────────────────────────────────────
@@ -143,7 +144,7 @@ function verifyV1Schnorr(pubkeyBuf: Buffer, kind: number, kindData: Buffer, sig:
 
 function buildV1ChunkHexes(pubkeyBuf: Buffer, sig: string, kind: number, kindData: Buffer): string[] {
   const chunks = buildV1Chunks(pubkeyBuf, Buffer.from(sig, "hex"), kind, kindData);
-  return chunks.map((c) => c.toString("hex"));
+  return chunks.map((c) => bytesToHex(c));
 }
 
 export function buildPayloadV1(content: string, pubkey: string, sig: string): string[] {

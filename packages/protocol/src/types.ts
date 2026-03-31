@@ -1,13 +1,13 @@
-export const ORS_MAGIC = Buffer.from([0x4f, 0x52, 0x53]); // "ORS"
-export const ORS_VERSION = 0x00;
+export const ORS_MAGIC = new Uint8Array([0x4f, 0x52, 0x53]); // "ORS"
+export const ORS_VERSION_V0 = 0x00;
 export const ORS_VERSION_V1 = 0x01;
 
 // v1 chunk header sizes
-export const V1_CHUNK0_HEADER = 6;  // ORS(3)+ver(1)+chunkNum(1)+totalChunks(1)
-export const V1_CHUNKN_HEADER = 5;  // ORS(3)+ver(1)+chunkNum(1)
+export const V1_CHUNK0_HEADER = 6; // ORS(3)+ver(1)+chunkNum(1)+totalChunks(1)
+export const V1_CHUNKN_HEADER = 5; // ORS(3)+ver(1)+chunkNum(1)
 // v1 body bytes per chunk slot
-export const V1_CHUNK0_DATA = 74;   // body bytes in chunk 0
-export const V1_CHUNKN_DATA = 75;   // body bytes in chunk N (N>=1)
+export const V1_CHUNK0_DATA = 74; // body bytes in chunk 0
+export const V1_CHUNKN_DATA = 75; // body bytes in chunk N (N>=1)
 
 export const KIND_TEXT_NOTE = 0x01;
 export const KIND_PROFILE_UPDATE = 0x02;
@@ -88,5 +88,14 @@ export interface OrsFollow {
 }
 
 export type ParsedOrsResult =
-  | { supported: true; post: OrsPost | OrsProfileUpdate | OrsTextReply | OrsRepost | OrsQuoteRepost | OrsFollow }
+  | {
+      supported: true;
+      post:
+        | OrsPost
+        | OrsProfileUpdate
+        | OrsTextReply
+        | OrsRepost
+        | OrsQuoteRepost
+        | OrsFollow;
+    }
   | { supported: false; reason: string };

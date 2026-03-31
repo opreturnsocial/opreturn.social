@@ -15,6 +15,7 @@ yarn add @opreturnsocial/protocol
 ORS embeds social interactions (posts, replies, reposts, follows, profile updates) directly into bitcoin OP_RETURN outputs. This library handles the binary serialization and deserialization of those payloads.
 
 - Zero production dependencies
+- Works in browsers and Node.js (no `Buffer` dependency)
 - Dual CJS/ESM exports
 - Supports both v0 (single OP_RETURN) and v1 (chunked 80-byte OP_RETURN) formats
 - Does not perform signing - only builds unsigned payloads and assembles signed ones
@@ -42,6 +43,15 @@ Signing body for v1: `sha256(pubkey || kind || kindData)` (no magic prefix)
 
 ## API Reference
 
+### Helpers
+
+```typescript
+hexToBytes(hex: string): Uint8Array
+bytesToHex(bytes: Uint8Array): string
+concatBytes(...bufs: Uint8Array[]): Uint8Array
+equalBytes(a: Uint8Array, b: Uint8Array): boolean
+```
+
 ### Constants
 
 #### Post Kinds
@@ -59,12 +69,12 @@ Signing body for v1: `sha256(pubkey || kind || kindData)` (no magic prefix)
 
 | Constant | Value | Description |
 |---|---|---|
-| `PROPERTY_NAME` | `0x00` | Display name |
-| `PROPERTY_AVATAR_URL` | `0x01` | Avatar image URL |
-| `PROPERTY_BIO` | `0x02` | Biography |
-| `PROPERTY_BANNER_URL` | `0x03` | Banner image URL |
-| `PROPERTY_BOT` | `0x04` | Bot flag |
-| `PROPERTY_WEBSITE_URL` | `0x05` | Website URL |
+| `PROFILE_PROPERTY_NAME` | `0x00` | Display name |
+| `PROFILE_PROPERTY_AVATAR_URL` | `0x01` | Avatar image URL |
+| `PROFILE_PROPERTY_BIO` | `0x02` | Biography |
+| `PROFILE_PROPERTY_BANNER_URL` | `0x03` | Banner image URL |
+| `PROFILE_PROPERTY_BOT` | `0x04` | Bot flag |
+| `PROFILE_PROPERTY_WEBSITE_URL` | `0x05` | Website URL |
 
 #### Other
 
@@ -131,59 +141,59 @@ type ParsedOrsResult =
 #### Unsigned payload builders (for signing)
 
 ```typescript
-buildUnsignedPayload(content: string, pubkey: Buffer): Buffer
-buildProfileUpdateUnsignedPayload(propertyKind: number, value: string | Buffer, pubkey: Buffer): Buffer
-buildReplyUnsignedPayload(content: string, pubkey: Buffer, parentTxidBytes: Buffer): Buffer
-buildRepostUnsignedPayload(pubkey: Buffer, referencedTxidBytes: Buffer): Buffer
-buildQuoteRepostUnsignedPayload(content: string, pubkey: Buffer, referencedTxidBytes: Buffer): Buffer
-buildFollowUnsignedPayload(targetPubkey: Buffer, isFollow: boolean, pubkey: Buffer): Buffer
+buildUnsignedPayload(content: string, pubkey: Uint8Array): Uint8Array
+buildProfileUpdateUnsignedPayload(propertyKind: number, value: string | Uint8Array, pubkey: Uint8Array): Uint8Array
+buildReplyUnsignedPayload(content: string, pubkey: Uint8Array, parentTxidBytes: Uint8Array): Uint8Array
+buildRepostUnsignedPayload(pubkey: Uint8Array, referencedTxidBytes: Uint8Array): Uint8Array
+buildQuoteRepostUnsignedPayload(content: string, pubkey: Uint8Array, referencedTxidBytes: Uint8Array): Uint8Array
+buildFollowUnsignedPayload(targetPubkey: Uint8Array, isFollow: boolean, pubkey: Uint8Array): Uint8Array
 ```
 
 #### Full payload builders (with signature)
 
 ```typescript
-buildORSPayload(content: string, pubkey: Buffer, sig: Buffer): Buffer
-buildProfileUpdatePayload(propertyKind: number, value: string | Buffer, pubkey: Buffer, sig: Buffer): Buffer
-buildReplyPayload(content: string, pubkey: Buffer, sig: Buffer, parentTxidBytes: Buffer): Buffer
-buildRepostPayload(pubkey: Buffer, sig: Buffer, referencedTxidBytes: Buffer): Buffer
-buildQuoteRepostPayload(content: string, pubkey: Buffer, sig: Buffer, referencedTxidBytes: Buffer): Buffer
-buildFollowPayload(targetPubkey: Buffer, isFollow: boolean, pubkey: Buffer, sig: Buffer): Buffer
+buildORSPayload(content: string, pubkey: Uint8Array, sig: Uint8Array): Uint8Array
+buildProfileUpdatePayload(propertyKind: number, value: string | Uint8Array, pubkey: Uint8Array, sig: Uint8Array): Uint8Array
+buildReplyPayload(content: string, pubkey: Uint8Array, sig: Uint8Array, parentTxidBytes: Uint8Array): Uint8Array
+buildRepostPayload(pubkey: Uint8Array, sig: Uint8Array, referencedTxidBytes: Uint8Array): Uint8Array
+buildQuoteRepostPayload(content: string, pubkey: Uint8Array, sig: Uint8Array, referencedTxidBytes: Uint8Array): Uint8Array
+buildFollowPayload(targetPubkey: Uint8Array, isFollow: boolean, pubkey: Uint8Array, sig: Uint8Array): Uint8Array
 ```
 
 #### Utilities
 
 ```typescript
 // Extract the unsigned portion from a signed payload (strips the signature)
-getUnsignedBytes(fullPayload: Buffer): Buffer
+getUnsignedBytes(fullPayload: Uint8Array): Uint8Array
 
 // Build v1 signing body: sha256(pubkey || kind || kindData)
-buildV1SigningBody(pubkey: Buffer, kind: number, kindData: Buffer): Buffer
+buildV1SigningBody(pubkey: Uint8Array, kind: number, kindData: Uint8Array): Uint8Array
 
 // Split a body into 80-byte v1 chunks
-buildV1Chunks(pubkey: Buffer, sig: Buffer, kind: number, kindData: Buffer): Buffer[]
+buildV1Chunks(pubkey: Uint8Array, sig: Uint8Array, kind: number, kindData: Uint8Array): Uint8Array[]
 ```
 
 ### Decoding
 
 ```typescript
 // Parse a v0 ORS payload from an OP_RETURN output
-parseORSPayload(data: Buffer): ParsedOrsResult
+parseORSPayload(data: Uint8Array): ParsedOrsResult
 
 // Parse a single v1 chunk
-parseV1Chunk(data: Buffer): V1ChunkInfo | null
+parseV1Chunk(data: Uint8Array): V1ChunkInfo | null
 
 interface V1ChunkInfo {
   chunkNum: number;
   totalChunks?: number;  // only present on chunk 0
-  bodySlice: Buffer;
+  bodySlice: Uint8Array;
 }
 
 // Reassemble v1 body slices into a decoded post
-assembleV1Body(slices: Buffer[]): {
-  pubkey: Buffer;
-  sig: Buffer;
+assembleV1Body(slices: Uint8Array[]): {
+  pubkey: Uint8Array;
+  sig: Uint8Array;
   kind: number;
-  kindData: Buffer;
+  kindData: Uint8Array;
 } | null
 ```
 
@@ -192,49 +202,50 @@ assembleV1Body(slices: Buffer[]): {
 ### Text post
 
 ```typescript
-import { buildUnsignedPayload, buildORSPayload } from '@opreturnsocial/protocol';
+import { buildUnsignedPayload, buildORSPayload, hexToBytes, bytesToHex } from '@opreturnsocial/protocol';
 import { schnorr } from '@noble/curves/secp256k1';
 
-const privkey = Buffer.from('your-32-byte-privkey-hex', 'hex');
-const pubkey = Buffer.from(schnorr.getPublicKey(privkey));
+const privkey = hexToBytes('your-32-byte-privkey-hex');
+const pubkey = schnorr.getPublicKey(privkey);
 
 // Build unsigned bytes, sign, then build full payload
 const unsigned = buildUnsignedPayload('Hello bitcoin!', pubkey);
-const sig = Buffer.from(schnorr.sign(unsigned, privkey));
+const sig = schnorr.sign(unsigned, privkey);
 const payload = buildORSPayload('Hello bitcoin!', pubkey, sig);
 // payload is the OP_RETURN data for your bitcoin transaction
+console.log(bytesToHex(payload));
 ```
 
 ### Reply
 
 ```typescript
-import { buildReplyUnsignedPayload, buildReplyPayload } from '@opreturnsocial/protocol';
+import { buildReplyUnsignedPayload, buildReplyPayload, hexToBytes } from '@opreturnsocial/protocol';
 
-const parentTxid = Buffer.from('parent-txid-hex', 'hex');
+const parentTxid = hexToBytes('parent-txid-hex');
 const unsigned = buildReplyUnsignedPayload('Great post!', pubkey, parentTxid);
-const sig = Buffer.from(schnorr.sign(unsigned, privkey));
+const sig = schnorr.sign(unsigned, privkey);
 const payload = buildReplyPayload('Great post!', pubkey, sig, parentTxid);
 ```
 
 ### Repost
 
 ```typescript
-import { buildRepostUnsignedPayload, buildRepostPayload } from '@opreturnsocial/protocol';
+import { buildRepostUnsignedPayload, buildRepostPayload, hexToBytes } from '@opreturnsocial/protocol';
 
-const referencedTxid = Buffer.from('txid-to-repost-hex', 'hex');
+const referencedTxid = hexToBytes('txid-to-repost-hex');
 const unsigned = buildRepostUnsignedPayload(pubkey, referencedTxid);
-const sig = Buffer.from(schnorr.sign(unsigned, privkey));
+const sig = schnorr.sign(unsigned, privkey);
 const payload = buildRepostPayload(pubkey, sig, referencedTxid);
 ```
 
 ### Follow
 
 ```typescript
-import { buildFollowUnsignedPayload, buildFollowPayload } from '@opreturnsocial/protocol';
+import { buildFollowUnsignedPayload, buildFollowPayload, hexToBytes } from '@opreturnsocial/protocol';
 
-const targetPubkey = Buffer.from('target-pubkey-hex', 'hex');
+const targetPubkey = hexToBytes('target-pubkey-hex');
 const unsigned = buildFollowUnsignedPayload(targetPubkey, true, pubkey);
-const sig = Buffer.from(schnorr.sign(unsigned, privkey));
+const sig = schnorr.sign(unsigned, privkey);
 const payload = buildFollowPayload(targetPubkey, true, pubkey, sig);
 ```
 
@@ -244,12 +255,12 @@ const payload = buildFollowPayload(targetPubkey, true, pubkey, sig);
 import {
   buildProfileUpdateUnsignedPayload,
   buildProfileUpdatePayload,
-  PROPERTY_NAME,
+  PROFILE_PROPERTY_NAME,
 } from '@opreturnsocial/protocol';
 
-const unsigned = buildProfileUpdateUnsignedPayload(PROPERTY_NAME, 'Satoshi', pubkey);
-const sig = Buffer.from(schnorr.sign(unsigned, privkey));
-const payload = buildProfileUpdatePayload(PROPERTY_NAME, 'Satoshi', pubkey, sig);
+const unsigned = buildProfileUpdateUnsignedPayload(PROFILE_PROPERTY_NAME, 'Satoshi', pubkey);
+const sig = schnorr.sign(unsigned, privkey);
+const payload = buildProfileUpdatePayload(PROFILE_PROPERTY_NAME, 'Satoshi', pubkey, sig);
 ```
 
 ### Parsing a received payload
@@ -273,7 +284,7 @@ import { parseV1Chunk, assembleV1Body } from '@opreturnsocial/protocol';
 
 // Collect chunks from multiple OP_RETURN outputs (ordered by chunk number)
 const chunks = [chunk0Data, chunk1Data, chunk2Data];
-const slices: Buffer[] = [];
+const slices: Uint8Array[] = [];
 
 for (const chunk of chunks) {
   const info = parseV1Chunk(chunk);
