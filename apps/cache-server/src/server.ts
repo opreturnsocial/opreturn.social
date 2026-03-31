@@ -146,20 +146,25 @@ export function createServer() {
     const dedupedReplies = replies.filter(
       (r) => r.network === "mainnet" || !repliesMainnetSigs.has(r.sig),
     );
-    const result: (StoredPost & { network: string })[] = dedupedReplies.map(
-      (p) => ({
-        txid: p.txid,
-        network: p.network,
-        blockHeight: p.blockHeight,
-        timestamp: p.timestamp,
-        content: p.content,
-        kind: p.kind,
-        pubkey: p.pubkey,
-        sig: p.sig,
-        parentTxid: p.parentTxid,
-        status: p.status,
-      }),
-    );
+    const dedupedTxids = dedupedReplies.map((p) => p.txid);
+    const counts = await getCountsForTxids(dedupedTxids);
+    const result: (StoredPost & {
+      network: string;
+      replyCount: number;
+      repostCount: number;
+    })[] = dedupedReplies.map((p) => ({
+      txid: p.txid,
+      network: p.network,
+      blockHeight: p.blockHeight,
+      timestamp: p.timestamp,
+      content: p.content,
+      kind: p.kind,
+      pubkey: p.pubkey,
+      sig: p.sig,
+      parentTxid: p.parentTxid,
+      status: p.status,
+      ...(counts[p.txid] ?? { replyCount: 0, repostCount: 0 }),
+    }));
     res.json({ posts: result });
   });
 

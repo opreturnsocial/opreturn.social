@@ -255,7 +255,7 @@ export function TxPage({
                 post={r}
                 profile={profiles[r.pubkey]}
                 hideReplyHeader
-                replyCount={replyCountMap[r.txid] ?? 0}
+                replyCount={r.replyCount ?? 0}
                 loggedInPubkey={loggedInPubkey}
                 onRefresh={load}
                 noteOgLeaderboard={noteOgLeaderboard}
