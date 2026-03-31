@@ -788,8 +788,7 @@ async function runScanCycle(network: string, rpc: RpcClient): Promise<void> {
       await scanBlock(height, network, rpc);
       await assembleV1Chunks(height, network);
     }
-    // FIXME: this is incorrectly evicting confirmed posts and profile updates
-    //await checkMempoolEvictions(network, rpc);
+    await checkMempoolEvictions(network, rpc);
   } catch (err) {
     console.error(`[scanner:${network}] Error during scan cycle:`, err);
   }
