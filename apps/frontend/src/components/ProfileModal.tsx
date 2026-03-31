@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { mempoolTxUrl, isFreeNetwork, FREE_NETWORK } from "@/lib/utils";
-import { Clock, Check, Copy, ExternalLink, AlertTriangle } from "lucide-react";
+import { BoxIcon, Clock, Check, Copy, ExternalLink, AlertTriangle } from "lucide-react";
 import { fetchActivity } from "../api/cache";
 import type { ActivityItem } from "../types";
 import {
@@ -84,10 +84,16 @@ export function ProfileModal({
     }
   }, [open, profile, loggedInPubkey]);
 
-  function TxidRow({ propertyKind, content }: { propertyKind: number; content: string }) {
+  function TxidRow({
+    propertyKind,
+    content,
+  }: {
+    propertyKind: number;
+    content: string;
+  }) {
     const item = fieldActivity.get(propertyKind);
     if (!item) return null;
-    const shortTxid = `${item.txid.slice(0, 8)}...${item.txid.slice(-8)}`;
+    const shortTxid = `${item.txid.slice(0, 8)}...`;
     const isPending = item.blockHeight === 0;
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono mt-1">
@@ -97,7 +103,13 @@ export function ProfileModal({
           <Check className="h-3 w-3 shrink-0 text-green-500" />
         )}
         <span>
-          {isPending ? "In Mempool" : `Confirmed at block ${item.blockHeight}`}
+          {isFreeNetwork(item.network)
+            ? isPending
+              ? `${item.network} · in mempool`
+              : `${item.network} · block ${item.blockHeight.toLocaleString()}`
+            : isPending
+              ? "in mempool"
+              : `block ${item.blockHeight.toLocaleString()}`}
         </span>
         <span className="opacity-60">{shortTxid}</span>
         <button
@@ -122,7 +134,7 @@ export function ProfileModal({
         >
           <ExternalLink className="h-3 w-3" />
         </button>
-        {isFreeNetwork(item.network) && (
+        {isFreeNetwork(item.network) ? (
           <MakePermanentButton
             actionType="profile"
             pubkey={loggedInPubkey}
@@ -131,6 +143,10 @@ export function ProfileModal({
             disabled={!content.trim() || saving !== null}
             onSuccess={onProfileUpdated}
           />
+        ) : (
+          <span title="On-chain bitcoin transaction">
+            <BoxIcon className="h-3 w-3 text-orange-500 shrink-0" />
+          </span>
         )}
       </div>
     );
@@ -163,7 +179,11 @@ export function ProfileModal({
       );
 
       toast.success(`${fieldName} saved`, {
-        action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, FREE_NETWORK), "_blank") },
+        action: {
+          label: "View on mempool",
+          onClick: () =>
+            window.open(mempoolTxUrl(txid, FREE_NETWORK), "_blank"),
+        },
       });
       onProfileUpdated();
     } catch (err) {
@@ -199,7 +219,11 @@ export function ProfileModal({
                 <Button
                   size="sm"
                   onClick={() => saveField(PROFILE_PROPERTY_NAME, name, "Name")}
-                  disabled={saving !== null || !name.trim() || name.trim() === (profile?.name ?? "").trim()}
+                  disabled={
+                    saving !== null ||
+                    !name.trim() ||
+                    name.trim() === (profile?.name ?? "").trim()
+                  }
                 >
                   {saving === "Name" ? "Saving…" : "Save"}
                 </Button>
@@ -235,10 +259,18 @@ export function ProfileModal({
                     ) {
                       setShowOrsWarning(true);
                     } else {
-                      saveField(PROFILE_PROPERTY_AVATAR_URL, avatarUrl, "Avatar URL");
+                      saveField(
+                        PROFILE_PROPERTY_AVATAR_URL,
+                        avatarUrl,
+                        "Avatar URL",
+                      );
                     }
                   }}
-                  disabled={saving !== null || !avatarUrl.trim() || avatarUrl.trim() === (profile?.avatarUrl ?? "").trim()}
+                  disabled={
+                    saving !== null ||
+                    !avatarUrl.trim() ||
+                    avatarUrl.trim() === (profile?.avatarUrl ?? "").trim()
+                  }
                 >
                   {saving === "Avatar URL" ? "Saving…" : "Save"}
                 </Button>
@@ -263,7 +295,10 @@ export function ProfileModal({
                   </p>
                 </div>
               )}
-              <TxidRow propertyKind={PROFILE_PROPERTY_AVATAR_URL} content={avatarUrl} />
+              <TxidRow
+                propertyKind={PROFILE_PROPERTY_AVATAR_URL}
+                content={avatarUrl}
+              />
             </div>
 
             <div className="space-y-1">
@@ -280,7 +315,11 @@ export function ProfileModal({
                 <Button
                   size="sm"
                   onClick={() => saveField(PROFILE_PROPERTY_BIO, bio, "Bio")}
-                  disabled={saving !== null || !bio.trim() || bio.trim() === (profile?.bio ?? "").trim()}
+                  disabled={
+                    saving !== null ||
+                    !bio.trim() ||
+                    bio.trim() === (profile?.bio ?? "").trim()
+                  }
                 >
                   {saving === "Bio" ? "Saving…" : "Save Bio"}
                 </Button>

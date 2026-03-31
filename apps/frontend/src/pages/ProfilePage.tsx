@@ -459,35 +459,37 @@ export function ProfilePage({
                   return (
                     <div key={kind}>
                       <DropdownMenuLabel className="text-xs font-normal">
-                        <span className="flex items-center gap-1">
-                          <span className="font-medium">
-                            {FIELD_NAMES[kind] ?? `Field ${kind}`}
-                          </span>
-                          {!isFreeNetwork(item.network) && (
-                            <span title="On-chain bitcoin transaction">
-                              <BoxIcon className="w-3 h-3 text-orange-500 shrink-0" />
-                            </span>
-                          )}
+                        <span className="font-medium">
+                          {FIELD_NAMES[kind] ?? `Field ${kind}`}
                         </span>
-                        <span className="text-muted-foreground">
-                          {item.blockHeight === 0
-                            ? "In Mempool"
-                            : `Confirmed at block ${item.blockHeight}`}
+                        <span className="block text-muted-foreground">
+                          {isFreeNetwork(item.network)
+                            ? item.blockHeight === 0
+                              ? `${item.network} · in mempool`
+                              : `${item.network} · block ${item.blockHeight.toLocaleString()}`
+                            : item.blockHeight === 0
+                              ? "in mempool"
+                              : `block ${item.blockHeight.toLocaleString()}`}
                         </span>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <TxidDropdownItem txid={item.txid} network={item.network}>
-                        {isFreeNetwork(item.network) &&
-                          loggedInPubkey === pubkey && (
-                            <MakePermanentButton
-                              actionType="profile"
-                              pubkey={loggedInPubkey!}
-                              propertyKind={kind}
-                              content={fieldContent}
-                              disabled={!fieldContent}
-                              onSuccess={load}
-                            />
-                          )}
+                        {isFreeNetwork(item.network)
+                          ? loggedInPubkey === pubkey && (
+                              <MakePermanentButton
+                                actionType="profile"
+                                pubkey={loggedInPubkey!}
+                                propertyKind={kind}
+                                content={fieldContent}
+                                disabled={!fieldContent}
+                                onSuccess={load}
+                              />
+                            )
+                          : (
+                              <span title="On-chain bitcoin transaction">
+                                <BoxIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                              </span>
+                            )}
                       </TxidDropdownItem>
                     </div>
                   );
