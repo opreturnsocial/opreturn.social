@@ -39,7 +39,8 @@ Two posting modes are supported:
 │                                                          │
 │  Paid flow:             Free flow:                       │
 │  - verify sig           - verify sig                     │
-│  - estimate fee         - check rate limit (20/hr)       │
+│  - estimate fee         - check rate limits (global/IP/  │
+│                           pubkey, per 10 min)            │
 │  - create hold invoice  - broadcast immediately          │
 │  - return invoice       - return { txid }                │
 │  - on LN confirm:                                        │
@@ -136,7 +137,10 @@ Two posting modes are supported:
 #### Free flow (test network) - no Lightning required
 
   1. Verify Schnorr signature
-  2. Check rate limit: max `FREE_NETWORK_RATE_LIMIT` (default 20) actions per pubkey per rolling hour; returns 429 if exceeded
+  2. Check rate limits (rolling 10-minute window, returns 429 if any exceeded):
+     - Global: max `FREE_NETWORK_RATE_LIMIT_GLOBAL` (default 500) actions across all users
+     - Per-IP: max `FREE_NETWORK_RATE_LIMIT_IP` (default 10) actions per client IP (in-memory)
+     - Per-pubkey: max `FREE_NETWORK_RATE_LIMIT_PUBKEY` (default 20) actions per Nostr pubkey (DB-backed)
   3. (Optional) Mainnet-activity gate: currently disabled to lower the entry barrier - the intent was to require at least one prior mainnet post before unlocking free posting
   4. Build ORS payload chunks
   5. Broadcast immediately to the free network node via RPC (same build+broadcast logic as paid, but synchronous)
@@ -250,7 +254,7 @@ Frontend reads `localStorage.ors_protocol_version` (default `"1"`). All write re
 1. User selects "free network" mode in settings (or the feed is already on the free network tab)
 2. Frontend signs `sha256(unsignedPayload)` with Schnorr
 3. Frontend POSTs `{ content, pubkey, sig }` to facilitator `/free/post`
-4. Facilitator verifies sig, checks rate limit (20 actions/hour per pubkey)
+4. Facilitator verifies sig, checks rate limits (global/IP/pubkey, max per 10 minutes)
 5. Facilitator broadcasts immediately to the free network bitcoin node
 6. Facilitator returns `{ txid }` synchronously - no invoice, no polling needed
 7. Cache picks up the new post in the next 5s poll of the free network node

@@ -65,9 +65,15 @@ const MAX_FEE_RATE_FREE_NETWORK_SAT_VBYTE = Number(
 // Free network config
 const FREE_NETWORK = process.env.FREE_NETWORK ?? "mutinynet";
 
-// Free network rate limit: max actions per pubkey per rolling hour
-const FREE_NETWORK_RATE_LIMIT = Number(
-  process.env.FREE_NETWORK_RATE_LIMIT ?? "20",
+// Free network rate limits (per rolling 10 minutes)
+const FREE_NETWORK_RATE_LIMIT_PUBKEY = Number(
+  process.env.FREE_NETWORK_RATE_LIMIT_PUBKEY ?? "10",
+);
+const FREE_NETWORK_RATE_LIMIT_IP = Number(
+  process.env.FREE_NETWORK_RATE_LIMIT_IP ?? "10",
+);
+const FREE_NETWORK_RATE_LIMIT_GLOBAL = Number(
+  process.env.FREE_NETWORK_RATE_LIMIT_GLOBAL ?? "200",
 );
 
 function calcInvoiceSats(feeSats: number): number {
@@ -194,11 +200,9 @@ async function handleAction(
     const effectiveSatPerVByte = (effectiveFeeRate * 1e8) / 1000;
 
     if (effectiveSatPerVByte > MAX_FEE_RATE_MAINNET_SAT_VBYTE) {
-      res
-        .status(400)
-        .json({
-          error: `Fee rate ${effectiveSatPerVByte.toFixed(1)} sat/vByte exceeds maximum of ${MAX_FEE_RATE_MAINNET_SAT_VBYTE} sat/vByte`,
-        });
+      res.status(400).json({
+        error: `Fee rate ${effectiveSatPerVByte.toFixed(1)} sat/vByte exceeds maximum of ${MAX_FEE_RATE_MAINNET_SAT_VBYTE} sat/vByte`,
+      });
       return;
     }
 
@@ -212,11 +216,9 @@ async function handleAction(
     } else {
       const chunks = buildV1();
       if (chunks.length > MAX_CHUNKS_PER_REQUEST) {
-        res
-          .status(400)
-          .json({
-            error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}`,
-          });
+        res.status(400).json({
+          error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}`,
+        });
         return;
       }
       chunksJson = JSON.stringify(chunks);
@@ -226,12 +228,10 @@ async function handleAction(
 
     const walletBalanceBtc = await getWalletBalance();
     if (walletBalanceBtc < estimatedFeeSats / 1e8) {
-      res
-        .status(503)
-        .json({
-          error:
-            "Facilitator has insufficient wallet balance to cover transaction fee",
-        });
+      res.status(503).json({
+        error:
+          "Facilitator has insufficient wallet balance to cover transaction fee",
+      });
       return;
     }
 
@@ -273,24 +273,82 @@ async function checkMainnetGate(
   return true;
 }
 
-// Rate limit check: max FREE_NETWORK_RATE_LIMIT free actions per pubkey per rolling hour.
-// Uses PendingBroadcast records directly.
+// In-memory sliding-window stores for IP and global rate limits
+const ipRequestLog = new Map<string, number[]>();
+let globalRequestLog: number[] = [];
+
+function checkInMemoryRateLimit(
+  log: number[],
+  limit: number,
+  windowMs: number,
+): { allowed: boolean; updatedLog: number[] } {
+  const now = Date.now();
+  const trimmed = log.filter((t) => now - t < windowMs);
+  if (trimmed.length >= limit) {
+    return { allowed: false, updatedLog: trimmed };
+  }
+  return { allowed: true, updatedLog: [...trimmed, now] };
+}
+
+// Rate limit check: global -> IP -> pubkey, all using a 10-minute rolling window.
 async function checkFreeNetworkRateLimit(
   pubkey: string,
+  ip: string,
   res: express.Response,
 ): Promise<boolean> {
-  const since = new Date(Date.now() - 60 * 60 * 1000);
+  const windowMs = 10 * 60 * 1000;
+
+  // Global rate limit (in-memory)
+  const globalCheck = checkInMemoryRateLimit(
+    globalRequestLog,
+    FREE_NETWORK_RATE_LIMIT_GLOBAL,
+    windowMs,
+  );
+  if (!globalCheck.allowed) {
+    console.error(
+      `Free global network rate limit exceeded (${FREE_NETWORK_RATE_LIMIT_GLOBAL} actions per 10 minutes per IP). Try again later.`,
+    );
+    res.status(429).json({
+      error: `Free network rate limit exceeded. Try again later.`,
+    });
+    return false;
+  }
+
+  // IP rate limit (in-memory)
+  const ipLog = ipRequestLog.get(ip) ?? [];
+  const ipCheck = checkInMemoryRateLimit(
+    ipLog,
+    FREE_NETWORK_RATE_LIMIT_IP,
+    windowMs,
+  );
+  if (!ipCheck.allowed) {
+    console.error(
+      `Free IP network rate limit exceeded (${FREE_NETWORK_RATE_LIMIT_IP} actions per 10 minutes per IP ${ip}). Try again later.`,
+    );
+    res.status(429).json({
+      error: `Free network rate limit exceeded. Try again later.`,
+    });
+    return false;
+  }
+
+  // Pubkey rate limit (DB-backed)
+  const since = new Date(Date.now() - windowMs);
   const count = await prisma.pendingBroadcast.count({
     where: { pubkey, network: FREE_NETWORK, createdAt: { gte: since } },
   });
-  if (count >= FREE_NETWORK_RATE_LIMIT) {
-    res
-      .status(429)
-      .json({
-        error: `Free network rate limit exceeded (${FREE_NETWORK_RATE_LIMIT} actions per hour). Try again later.`,
-      });
+  if (count >= FREE_NETWORK_RATE_LIMIT_PUBKEY) {
+    console.error(
+      `Free pubkey network rate limit exceeded (${FREE_NETWORK_RATE_LIMIT_PUBKEY} actions per 10 minutes per pubkey ${pubkey}). Try again later.`,
+    );
+    res.status(429).json({
+      error: `Free network global rate limit exceeded. Try again later.`,
+    });
     return false;
   }
+
+  // All checks passed - commit in-memory counters
+  globalRequestLog = globalCheck.updatedLog;
+  ipRequestLog.set(ip, ipCheck.updatedLog);
   return true;
 }
 
@@ -395,6 +453,7 @@ async function broadcastFreeNetwork(
 async function handleFreeNetworkAction(
   action: string,
   pubkey: string,
+  ip: string,
   feeBumpSatPerVByte: number,
   buildV1: () => string[],
   requestBody: object,
@@ -402,7 +461,7 @@ async function handleFreeNetworkAction(
 ): Promise<void> {
   try {
     // Rate limit
-    if (!(await checkFreeNetworkRateLimit(pubkey, res))) return;
+    if (!(await checkFreeNetworkRateLimit(pubkey, ip, res))) return;
 
     // Fee rate cap for free network
     const feeRateSatPerVByte = Math.min(
@@ -413,11 +472,9 @@ async function handleFreeNetworkAction(
 
     const chunks = buildV1();
     if (chunks.length > MAX_CHUNKS_PER_REQUEST) {
-      res
-        .status(400)
-        .json({
-          error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}`,
-        });
+      res.status(400).json({
+        error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}`,
+      });
       return;
     }
     const chunksJson = chunks.length > 0 ? JSON.stringify(chunks) : undefined;
@@ -460,6 +517,7 @@ function serialisedFreeNetworkBroadcast<T>(fn: () => Promise<T>): Promise<T> {
 
 export function createServer() {
   const app = express();
+  app.set("trust proxy", 1);
   app.use(cors());
   app.use(express.json());
 
@@ -627,11 +685,9 @@ export function createServer() {
       feePriority?: string;
     };
     if (!content || !pubkey || !sig || !referencedTxid) {
-      res
-        .status(400)
-        .json({
-          error: "content, pubkey, sig, and referencedTxid are required",
-        });
+      res.status(400).json({
+        error: "content, pubkey, sig, and referencedTxid are required",
+      });
       return;
     }
     const pv2 = pv ?? 1;
@@ -667,11 +723,9 @@ export function createServer() {
       feePriority?: string;
     };
     if (!targetPubkey || typeof isFollow !== "boolean" || !pubkey || !sig) {
-      res
-        .status(400)
-        .json({
-          error: "targetPubkey, isFollow, pubkey, and sig are required",
-        });
+      res.status(400).json({
+        error: "targetPubkey, isFollow, pubkey, and sig are required",
+      });
       return;
     }
     const pv2 = pv ?? 1;
@@ -850,11 +904,9 @@ export function createServer() {
           );
         } else if (item.type === "profile_update") {
           if (item.propertyKind === undefined || item.value === undefined) {
-            res
-              .status(400)
-              .json({
-                error: "Profile update is missing propertyKind or value",
-              });
+            res.status(400).json({
+              error: "Profile update is missing propertyKind or value",
+            });
             return;
           }
           chunks = buildPayloadProfileV1(
@@ -877,22 +929,18 @@ export function createServer() {
       const effectiveFeeRate = feerate + feeBump;
       const effectiveSatPerVByte = (effectiveFeeRate * 1e8) / 1000;
       if (effectiveSatPerVByte > MAX_FEE_RATE_MAINNET_SAT_VBYTE) {
-        res
-          .status(400)
-          .json({
-            error: `Fee rate ${effectiveSatPerVByte.toFixed(1)} sat/vByte exceeds maximum of ${MAX_FEE_RATE_MAINNET_SAT_VBYTE} sat/vByte`,
-          });
+        res.status(400).json({
+          error: `Fee rate ${effectiveSatPerVByte.toFixed(1)} sat/vByte exceeds maximum of ${MAX_FEE_RATE_MAINNET_SAT_VBYTE} sat/vByte`,
+        });
         return;
       }
       const estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
       const walletBalanceBtc = await getWalletBalance();
       if (walletBalanceBtc < estimatedFeeSats / 1e8) {
-        res
-          .status(503)
-          .json({
-            error:
-              "Facilitator has insufficient wallet balance to cover transaction fee",
-          });
+        res.status(503).json({
+          error:
+            "Facilitator has insufficient wallet balance to cover transaction fee",
+        });
         return;
       }
       const result = await preparePending(
@@ -950,6 +998,7 @@ export function createServer() {
     await handleFreeNetworkAction(
       "post",
       pubkey,
+      req.ip ?? "",
       typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadV1(content, pubkey, sig),
       { content, pubkey, sig, protocolVersion: pv ?? 1 },
@@ -983,6 +1032,7 @@ export function createServer() {
     await handleFreeNetworkAction(
       "reply",
       pubkey,
+      req.ip ?? "",
       typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadReplyV1(content, pubkey, sig, parentTxid),
       { content, pubkey, sig, parentTxid, protocolVersion: pv ?? 1 },
@@ -1014,6 +1064,7 @@ export function createServer() {
     await handleFreeNetworkAction(
       "repost",
       pubkey,
+      req.ip ?? "",
       typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadRepostV1(pubkey, sig, referencedTxid),
       { pubkey, sig, referencedTxid, protocolVersion: pv ?? 1 },
@@ -1038,17 +1089,16 @@ export function createServer() {
       feeBumpSatPerVByte?: number;
     };
     if (!content || !pubkey || !sig || !referencedTxid) {
-      res
-        .status(400)
-        .json({
-          error: "content, pubkey, sig, and referencedTxid are required",
-        });
+      res.status(400).json({
+        error: "content, pubkey, sig, and referencedTxid are required",
+      });
       return;
     }
     if (!(await checkMainnetGate(pubkey, res))) return;
     await handleFreeNetworkAction(
       "quote-repost",
       pubkey,
+      req.ip ?? "",
       typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadQuoteRepostV1(content, pubkey, sig, referencedTxid),
       { content, pubkey, sig, referencedTxid, protocolVersion: pv ?? 1 },
@@ -1073,17 +1123,16 @@ export function createServer() {
       feeBumpSatPerVByte?: number;
     };
     if (!targetPubkey || typeof isFollow !== "boolean" || !pubkey || !sig) {
-      res
-        .status(400)
-        .json({
-          error: "targetPubkey, isFollow, pubkey, and sig are required",
-        });
+      res.status(400).json({
+        error: "targetPubkey, isFollow, pubkey, and sig are required",
+      });
       return;
     }
     if (!(await checkMainnetGate(pubkey, res))) return;
     await handleFreeNetworkAction(
       "follow",
       pubkey,
+      req.ip ?? "",
       typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadFollowV1(targetPubkey, isFollow, pubkey, sig),
       { targetPubkey, isFollow, pubkey, sig, protocolVersion: pv ?? 1 },
@@ -1117,6 +1166,7 @@ export function createServer() {
     await handleFreeNetworkAction(
       "profile",
       pubkey,
+      req.ip ?? "",
       typeof fbRaw === "number" ? fbRaw : 0,
       () => buildPayloadProfileV1(propertyKind, value, pubkey, sig),
       { propertyKind, value, pubkey, sig, protocolVersion: pv ?? 1 },
