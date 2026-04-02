@@ -110,8 +110,8 @@ export function useFeed(filter?: { pubkey?: string; viewer?: string; feedFilter?
     setLoadingMore(true);
     try {
       const offset = offsetRef.current;
-      const { items: data, parentPosts: pp, parentActivities: pa } = await fetchFeed(PAGE_SIZE, offset, filter);
-      if (data.length < PAGE_SIZE) {
+      const { items: data, parentPosts: pp, parentActivities: pa, hasMore: serverHasMore } = await fetchFeed(PAGE_SIZE, offset, filter);
+      if (!serverHasMore) {
         hasMoreRef.current = false;
         setHasMore(false);
       }

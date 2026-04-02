@@ -67,15 +67,15 @@ export async function fetchFeed(
   limit = 20,
   offset = 0,
   filter?: { pubkey?: string; viewer?: string; feedFilter?: string },
-): Promise<{ items: FeedItem[]; parentPosts: Post[]; parentActivities: ActivityItem[] }> {
+): Promise<{ items: FeedItem[]; parentPosts: Post[]; parentActivities: ActivityItem[]; hasMore: boolean }> {
   let url = `${BASE_URL}/feed?limit=${limit}&offset=${offset}`;
   if (filter?.pubkey) url += `&pubkey=${encodeURIComponent(filter.pubkey)}`;
   if (filter?.viewer) url += `&viewer=${encodeURIComponent(filter.viewer)}`;
   if (filter?.feedFilter) url += `&feedFilter=${encodeURIComponent(filter.feedFilter)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
-  const data = await res.json() as { items: FeedItem[]; parentPosts?: Post[]; parentActivities?: ActivityItem[] };
-  return { items: data.items, parentPosts: data.parentPosts ?? [], parentActivities: data.parentActivities ?? [] };
+  const data = await res.json() as { items: FeedItem[]; parentPosts?: Post[]; parentActivities?: ActivityItem[]; hasMore?: boolean };
+  return { items: data.items, parentPosts: data.parentPosts ?? [], parentActivities: data.parentActivities ?? [], hasMore: data.hasMore ?? false };
 }
 
 export async function fetchOgLeaderboard(): Promise<{ pubkey: string; rank: number; firstTimestamp: number }[]> {

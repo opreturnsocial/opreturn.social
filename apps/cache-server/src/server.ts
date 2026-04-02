@@ -23,6 +23,7 @@ import {
   PROFILE_PROPERTY_BIO,
   PROFILE_PROPERTY_BOT,
 } from "@opreturnsocial/protocol";
+import { Prisma } from "../generated/client/index.js";
 import { prisma } from "./db.js";
 import { rescanFrom } from "./scanner.js";
 import type { StoredPost, StoredProfile, StoredActivityItem } from "./types.js";
@@ -555,8 +556,6 @@ export function createServer() {
     const pubkey = req.query.pubkey as string | undefined;
     const viewer = req.query.viewer as string | undefined;
     const feedFilter = (req.query.feedFilter as string) ?? "posts";
-    const fetchLimit = limit + offset;
-
     // Resolve which pubkeys to filter by
     let filterPubkeys: string[] | undefined;
     let filterSinglePubkey: string | undefined;
@@ -580,142 +579,248 @@ export function createServer() {
       filterSinglePubkey = pubkey;
     }
 
-    const networkFilter = { network: { in: ["mainnet", FREE_NETWORK] } };
-    const postWhere = {
-      status: { not: "evicted" as const },
-      ...networkFilter,
-      ...(feedFilter === "posts" ? { kind: { not: KIND_TEXT_REPLY } } : {}),
-      ...(filterPubkeys
-        ? { pubkey: { in: filterPubkeys } }
-        : filterSinglePubkey
-          ? { pubkey: filterSinglePubkey }
-          : {}),
-    };
-    const followWhere = {
-      status: { not: "evicted" as const },
-      ...networkFilter,
-      ...(filterPubkeys
-        ? { followerPubkey: { in: filterPubkeys } }
-        : filterSinglePubkey
-          ? { followerPubkey: filterSinglePubkey }
-          : {}),
-    };
-    const profileUpdateWhere = {
-      status: { not: "evicted" as const },
-      ...networkFilter,
-      ...(filterPubkeys
-        ? { pubkey: { in: filterPubkeys } }
-        : filterSinglePubkey
-          ? { pubkey: filterSinglePubkey }
-          : {}),
-    };
-
-    const includeActivity = feedFilter === "all";
-    const [allPosts, follows, profileUpdates] = await Promise.all([
-      prisma.post.findMany({
-        where: postWhere,
-        orderBy: [{ timestamp: "desc" }, { txid: "asc" }],
-        take: fetchLimit,
-      }),
-      includeActivity
-        ? prisma.follow.findMany({ where: followWhere })
-        : Promise.resolve([]),
-      includeActivity
-        ? prisma.profileUpdateEvent.findMany({ where: profileUpdateWhere })
-        : Promise.resolve([]),
-    ]);
-
-    // Deduplicate posts: mainnet wins on same sig
-    const mainnetPostSigs = new Set(
-      allPosts.filter((p) => p.network === "mainnet").map((p) => p.sig),
-    );
-    const dedupedPosts = allPosts.filter(
-      (p) => p.network === "mainnet" || !mainnetPostSigs.has(p.sig),
-    );
-
-    // Dedup activity (mainnet wins)
-    const followsMap = new Map<string, (typeof follows)[0]>();
-    for (const f of follows) {
-      const key = `${f.followerPubkey}:${f.followeePubkey}`;
-      const existing = followsMap.get(key);
-      if (!existing || f.network === "mainnet") followsMap.set(key, f);
-    }
-    const dedupedFollows = Array.from(followsMap.values());
-
-    const profileUpdatesMap = new Map<string, (typeof profileUpdates)[0]>();
-    for (const e of profileUpdates) {
-      // TODO: remove e.txid from key after full rescan on production
-      const key = e.sig || e.txid;
-      const existing = profileUpdatesMap.get(key);
-      if (!existing || e.network === "mainnet") profileUpdatesMap.set(key, e);
-    }
-    const dedupedProfileUpdates = Array.from(profileUpdatesMap.values());
-
-    // Build unified timeline with feedType discriminator
     type RawItem = {
       feedType: "post" | "activity";
       timestamp: number;
       txid: string;
       data: Record<string, unknown>;
     };
-    const allItems: RawItem[] = [
-      ...dedupedPosts.map((p) => ({
+
+    let page: RawItem[];
+    let hasMore: boolean;
+
+    const includeActivity = feedFilter === "all";
+
+    if (!includeActivity) {
+      // Posts-only: raw SQL with DB-level OFFSET/LIMIT and cross-network dedup via NOT EXISTS.
+      // This ensures each page always fetches exactly limit+1 rows regardless of page number.
+      const kindFilter =
+        feedFilter === "posts"
+          ? Prisma.sql`AND p.kind != ${KIND_TEXT_REPLY}`
+          : Prisma.empty;
+      const pubkeyFilter = filterPubkeys
+        ? Prisma.sql`AND p.pubkey IN (${Prisma.join(filterPubkeys)})`
+        : filterSinglePubkey
+          ? Prisma.sql`AND p.pubkey = ${filterSinglePubkey}`
+          : Prisma.empty;
+
+      const rawPosts = await prisma.$queryRaw<{
+        txid: string;
+        network: string;
+        blockHeight: bigint;
+        timestamp: bigint;
+        content: string;
+        kind: bigint;
+        pubkey: string;
+        sig: string;
+        parentTxid: string | null;
+        status: string;
+      }[]>`
+        SELECT p.*
+        FROM "Post" p
+        WHERE p.status != 'evicted'
+          AND p.network IN ('mainnet', ${FREE_NETWORK})
+          AND NOT (
+            p.network != 'mainnet'
+            AND EXISTS (
+              SELECT 1 FROM "Post" p2
+              WHERE p2.sig = p.sig
+                AND p2.network = 'mainnet'
+                AND p2.status != 'evicted'
+            )
+          )
+          ${kindFilter}
+          ${pubkeyFilter}
+        ORDER BY p.timestamp DESC, p.txid ASC
+        LIMIT ${limit + 1} OFFSET ${offset}
+      `;
+
+      hasMore = rawPosts.length > limit;
+      page = rawPosts.slice(0, limit).map((p) => ({
         feedType: "post" as const,
-        timestamp: p.timestamp,
+        timestamp: Number(p.timestamp),
         txid: p.txid,
         data: {
           feedType: "post",
           txid: p.txid,
           network: p.network,
-          blockHeight: p.blockHeight,
-          timestamp: p.timestamp,
+          blockHeight: Number(p.blockHeight),
+          timestamp: Number(p.timestamp),
           content: p.content,
-          kind: p.kind,
+          kind: Number(p.kind),
           pubkey: p.pubkey,
           sig: p.sig,
           parentTxid: p.parentTxid,
           status: p.status,
         },
-      })),
-      ...dedupedFollows.map((f) => ({
-        feedType: "activity" as const,
-        timestamp: f.timestamp,
-        txid: f.txid,
-        data: {
-          feedType: "activity",
-          type: f.isFollow ? "follow" : "unfollow",
-          txid: f.txid,
-          network: f.network,
-          pubkey: f.followerPubkey,
-          timestamp: f.timestamp,
-          blockHeight: f.blockHeight,
-          status: f.status,
-          targetPubkey: f.followeePubkey,
-        },
-      })),
-      ...dedupedProfileUpdates.map((e) => ({
-        feedType: "activity" as const,
-        timestamp: e.timestamp,
-        txid: e.txid,
-        data: {
-          feedType: "activity",
-          type: "profile_update",
-          txid: e.txid,
-          network: e.network,
-          pubkey: e.pubkey,
-          timestamp: e.timestamp,
-          blockHeight: e.blockHeight,
-          status: e.status,
-          propertyKind: e.propertyKind,
-          value: e.value,
-        },
-      })),
-    ];
+      }));
+    } else {
+      // Activity mode: UNION ALL of posts + follows + profile updates with DB-level dedup
+      // and pagination. Each source deduplicates via NOT EXISTS (mainnet wins on same key).
+      const pubkeyFilterPost = filterPubkeys
+        ? Prisma.sql`AND p.pubkey IN (${Prisma.join(filterPubkeys)})`
+        : filterSinglePubkey
+          ? Prisma.sql`AND p.pubkey = ${filterSinglePubkey}`
+          : Prisma.empty;
+      const pubkeyFilterFollow = filterPubkeys
+        ? Prisma.sql`AND f.followerPubkey IN (${Prisma.join(filterPubkeys)})`
+        : filterSinglePubkey
+          ? Prisma.sql`AND f.followerPubkey = ${filterSinglePubkey}`
+          : Prisma.empty;
+      const pubkeyFilterProfile = filterPubkeys
+        ? Prisma.sql`AND e.pubkey IN (${Prisma.join(filterPubkeys)})`
+        : filterSinglePubkey
+          ? Prisma.sql`AND e.pubkey = ${filterSinglePubkey}`
+          : Prisma.empty;
 
-    allItems.sort(
-      (a, b) => b.timestamp - a.timestamp || a.txid.localeCompare(b.txid),
-    );
-    const page = allItems.slice(offset, offset + limit);
+      const rawItems = await prisma.$queryRaw<{
+        feedType: string;
+        activityType: string | null;
+        txid: string;
+        network: string;
+        blockHeight: bigint;
+        timestamp: bigint;
+        status: string;
+        sig: string;
+        pubkey: string;
+        content: string | null;
+        kind: bigint | null;
+        parentTxid: string | null;
+        targetPubkey: string | null;
+        propertyKind: bigint | null;
+        value: string | null;
+      }[]>`
+        SELECT
+          'post'    AS feedType,
+          NULL      AS activityType,
+          p.txid, p.network, p.blockHeight, p.timestamp, p.status, p.sig,
+          p.pubkey, p.content, p.kind, p.parentTxid,
+          NULL AS targetPubkey, NULL AS propertyKind, NULL AS value
+        FROM "Post" p
+        WHERE p.status != 'evicted'
+          AND p.network IN ('mainnet', ${FREE_NETWORK})
+          AND NOT (
+            p.network != 'mainnet'
+            AND EXISTS (
+              SELECT 1 FROM "Post" p2
+              WHERE p2.sig = p.sig
+                AND p2.network = 'mainnet'
+                AND p2.status != 'evicted'
+            )
+          )
+          ${pubkeyFilterPost}
+
+        UNION ALL
+
+        SELECT
+          'activity' AS feedType,
+          CASE WHEN f.isFollow THEN 'follow' ELSE 'unfollow' END AS activityType,
+          f.txid, f.network, f.blockHeight, f.timestamp, f.status, f.sig,
+          f.followerPubkey AS pubkey, NULL AS content, NULL AS kind, NULL AS parentTxid,
+          f.followeePubkey AS targetPubkey, NULL AS propertyKind, NULL AS value
+        FROM "Follow" f
+        WHERE f.status != 'evicted'
+          AND f.network IN ('mainnet', ${FREE_NETWORK})
+          AND NOT (
+            f.network != 'mainnet'
+            AND EXISTS (
+              SELECT 1 FROM "Follow" f2
+              WHERE f2.followerPubkey = f.followerPubkey
+                AND f2.followeePubkey = f.followeePubkey
+                AND f2.network = 'mainnet'
+                AND f2.status != 'evicted'
+            )
+          )
+          ${pubkeyFilterFollow}
+
+        UNION ALL
+
+        SELECT
+          'activity'       AS feedType,
+          'profile_update' AS activityType,
+          e.txid, e.network, e.blockHeight, e.timestamp, e.status, e.sig,
+          e.pubkey, NULL AS content, NULL AS kind, NULL AS parentTxid,
+          NULL AS targetPubkey, e.propertyKind, e.value
+        FROM "ProfileUpdateEvent" e
+        WHERE e.status != 'evicted'
+          AND e.network IN ('mainnet', ${FREE_NETWORK})
+          AND NOT (
+            e.network != 'mainnet'
+            AND EXISTS (
+              SELECT 1 FROM "ProfileUpdateEvent" e2
+              WHERE (
+                (e.sig != '' AND e2.sig = e.sig) OR
+                (e.sig = '' AND e2.txid = e.txid)
+              )
+              AND e2.network = 'mainnet'
+              AND e2.status != 'evicted'
+            )
+          )
+          ${pubkeyFilterProfile}
+
+        ORDER BY timestamp DESC, txid ASC
+        LIMIT ${limit + 1} OFFSET ${offset}
+      `;
+
+      hasMore = rawItems.length > limit;
+      page = rawItems.slice(0, limit).map((row) => {
+        if (row.feedType === "post") {
+          return {
+            feedType: "post" as const,
+            timestamp: Number(row.timestamp),
+            txid: row.txid,
+            data: {
+              feedType: "post",
+              txid: row.txid,
+              network: row.network,
+              blockHeight: Number(row.blockHeight),
+              timestamp: Number(row.timestamp),
+              content: row.content,
+              kind: Number(row.kind),
+              pubkey: row.pubkey,
+              sig: row.sig,
+              parentTxid: row.parentTxid,
+              status: row.status,
+            },
+          };
+        } else if (row.activityType === "profile_update") {
+          return {
+            feedType: "activity" as const,
+            timestamp: Number(row.timestamp),
+            txid: row.txid,
+            data: {
+              feedType: "activity",
+              type: "profile_update",
+              txid: row.txid,
+              network: row.network,
+              pubkey: row.pubkey,
+              timestamp: Number(row.timestamp),
+              blockHeight: Number(row.blockHeight),
+              status: row.status,
+              propertyKind: Number(row.propertyKind),
+              value: row.value,
+            },
+          };
+        } else {
+          return {
+            feedType: "activity" as const,
+            timestamp: Number(row.timestamp),
+            txid: row.txid,
+            data: {
+              feedType: "activity",
+              type: row.activityType,
+              txid: row.txid,
+              network: row.network,
+              pubkey: row.pubkey,
+              timestamp: Number(row.timestamp),
+              blockHeight: Number(row.blockHeight),
+              status: row.status,
+              targetPubkey: row.targetPubkey,
+            },
+          };
+        }
+      });
+    }
 
     // Attach reply/repost counts to all items
     const txids = page.map((i) => i.txid);
@@ -807,7 +912,7 @@ export function createServer() {
       ];
     }
 
-    res.json({ items, parentPosts, parentActivities });
+    res.json({ items, parentPosts, parentActivities, hasMore });
   });
 
   app.get("/activity/:txid", async (req, res) => {

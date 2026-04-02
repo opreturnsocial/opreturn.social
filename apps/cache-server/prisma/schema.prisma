@@ -21,6 +21,9 @@ model Post {
   status      String  @default("confirmed")
 
   @@id([txid, network])
+  @@index([network, status, timestamp(sort: Desc)])
+  @@index([sig, network, status])
+  @@index([pubkey, network, status])
 }
 
 model ScannerState {
@@ -52,6 +55,8 @@ model Follow {
   sig            String  @default("")
 
   @@id([followerPubkey, followeePubkey, network])
+  @@index([network, status, timestamp(sort: Desc)])
+  @@index([followerPubkey, network, status])
 }
 
 model ProfileUpdateEvent {
@@ -66,6 +71,9 @@ model ProfileUpdateEvent {
   sig          String @default("")
 
   @@id([txid, network])
+  @@index([network, status, timestamp(sort: Desc)])
+  @@index([sig, network, status])
+  @@index([pubkey, network, status])
 }
 
 model ScannedBlock {
