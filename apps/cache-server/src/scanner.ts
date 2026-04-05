@@ -19,12 +19,29 @@ import {
   getUnsignedBytes,
 } from "@opreturnsocial/protocol";
 import type {
+  OrsPost,
   OrsProfileUpdate,
   OrsTextReply,
   OrsRepost,
   OrsQuoteRepost,
   OrsFollow,
 } from "@opreturnsocial/protocol";
+
+interface DecodedEvent {
+  txid: string;
+  network: string;
+  pubkey: string;
+  sig: string;
+  blockHeight: number;
+  timestamp: number;
+  kind: number;
+  content?: string;
+  parentTxid?: string;
+  propertyKind?: number;
+  propertyValue?: string;
+  targetPubkey?: string;
+  isFollow?: boolean;
+}
 import { prisma } from "./db.js";
 import { mainnetRpc, freeNetworkRpc, RpcError, type RpcClient } from "./rpc.js";
 
@@ -84,6 +101,182 @@ async function createNotification(
     create: { recipientPubkey, actorPubkey, kind, txid, network, timestamp },
     update: {},
   });
+}
+
+function normalizeV0(
+  post: OrsPost | OrsTextReply | OrsRepost | OrsQuoteRepost | OrsProfileUpdate | OrsFollow,
+  txid: string,
+  network: string,
+  blockHeight: number,
+  timestamp: number,
+): DecodedEvent | null {
+  const base = { txid, network, pubkey: post.pubkey, sig: post.sig, blockHeight, timestamp, kind: post.kind };
+  switch (post.kind) {
+    case KIND_TEXT_NOTE:
+      return { ...base, content: (post as OrsPost).content };
+    case KIND_TEXT_REPLY: {
+      const r = post as OrsTextReply;
+      return { ...base, content: r.content, parentTxid: r.parentTxid };
+    }
+    case KIND_REPOST:
+      return { ...base, parentTxid: (post as OrsRepost).referencedTxid };
+    case KIND_QUOTE_REPOST: {
+      const q = post as OrsQuoteRepost;
+      return { ...base, content: q.content, parentTxid: q.referencedTxid };
+    }
+    case KIND_PROFILE_UPDATE: {
+      const u = post as OrsProfileUpdate;
+      return { ...base, propertyKind: u.propertyKind, propertyValue: u.content };
+    }
+    case KIND_FOLLOW: {
+      const f = post as OrsFollow;
+      return { ...base, targetPubkey: f.targetPubkey, isFollow: f.isFollow };
+    }
+    default:
+      return null;
+  }
+}
+
+function normalizeV1(
+  txid: string,
+  network: string,
+  pubkey: Uint8Array,
+  sig: Uint8Array,
+  kind: number,
+  kindData: Uint8Array,
+  blockHeight: number,
+  timestamp: number,
+): DecodedEvent | null {
+  const pubkeyHex = bytesToHex(pubkey);
+  const sigHex = bytesToHex(sig);
+  const base = { txid, network, pubkey: pubkeyHex, sig: sigHex, blockHeight, timestamp, kind };
+  switch (kind) {
+    case KIND_TEXT_NOTE:
+      return { ...base, content: new TextDecoder().decode(kindData) };
+    case KIND_TEXT_REPLY: {
+      if (kindData.length < 32) return null;
+      return {
+        ...base,
+        parentTxid: bytesToHex(kindData.subarray(0, 32)),
+        content: new TextDecoder().decode(kindData.subarray(32)),
+      };
+    }
+    case KIND_REPOST: {
+      if (kindData.length < 32) return null;
+      return { ...base, parentTxid: bytesToHex(kindData.subarray(0, 32)) };
+    }
+    case KIND_QUOTE_REPOST: {
+      if (kindData.length < 32) return null;
+      return {
+        ...base,
+        parentTxid: bytesToHex(kindData.subarray(0, 32)),
+        content: new TextDecoder().decode(kindData.subarray(32)),
+      };
+    }
+    case KIND_PROFILE_UPDATE: {
+      if (kindData.length < 1) return null;
+      return {
+        ...base,
+        propertyKind: kindData[0],
+        propertyValue: new TextDecoder().decode(kindData.subarray(1)),
+      };
+    }
+    case KIND_FOLLOW: {
+      if (kindData.length < 33) return null;
+      return {
+        ...base,
+        targetPubkey: bytesToHex(kindData.subarray(0, 32)),
+        isFollow: kindData[32] === 0x01,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+async function processDecodedEvent(event: DecodedEvent): Promise<void> {
+  const { txid, network, pubkey, sig, blockHeight, timestamp, kind } = event;
+
+  if (kind === KIND_TEXT_NOTE) {
+    await prisma.post.upsert({
+      where: { txid_network: { txid, network } },
+      create: { txid, network, blockHeight, timestamp, content: event.content!, kind, pubkey, sig, status: "confirmed" },
+      update: { blockHeight, timestamp, status: "confirmed" },
+    });
+    console.log(`[scanner:${network}] TEXT_NOTE ${txid}`);
+
+  } else if (kind === KIND_TEXT_REPLY) {
+    await prisma.post.upsert({
+      where: { txid_network: { txid, network } },
+      create: { txid, network, blockHeight, timestamp, content: event.content!, kind, pubkey, sig, parentTxid: event.parentTxid, status: "confirmed" },
+      update: { blockHeight, timestamp, status: "confirmed" },
+    });
+    console.log(`[scanner:${network}] TEXT_REPLY ${txid}`);
+    const parent = await prisma.post.findFirst({
+      where: { txid: event.parentTxid!, network: { in: ["mainnet", FREE_NETWORK] } },
+      select: { pubkey: true },
+    });
+    if (parent) await createNotification(parent.pubkey, pubkey, kind, txid, network, timestamp);
+
+  } else if (kind === KIND_REPOST) {
+    await prisma.post.upsert({
+      where: { txid_network: { txid, network } },
+      create: { txid, network, blockHeight, timestamp, content: "", kind, pubkey, sig, parentTxid: event.parentTxid, status: "confirmed" },
+      update: { blockHeight, timestamp, status: "confirmed" },
+    });
+    console.log(`[scanner:${network}] REPOST ${txid}`);
+    const parent = await prisma.post.findFirst({
+      where: { txid: event.parentTxid!, network: { in: ["mainnet", FREE_NETWORK] } },
+      select: { pubkey: true },
+    });
+    if (parent) await createNotification(parent.pubkey, pubkey, kind, txid, network, timestamp);
+
+  } else if (kind === KIND_QUOTE_REPOST) {
+    await prisma.post.upsert({
+      where: { txid_network: { txid, network } },
+      create: { txid, network, blockHeight, timestamp, content: event.content!, kind, pubkey, sig, parentTxid: event.parentTxid, status: "confirmed" },
+      update: { blockHeight, timestamp, status: "confirmed" },
+    });
+    console.log(`[scanner:${network}] QUOTE_REPOST ${txid}`);
+    const parent = await prisma.post.findFirst({
+      where: { txid: event.parentTxid!, network: { in: ["mainnet", FREE_NETWORK] } },
+      select: { pubkey: true },
+    });
+    if (parent) await createNotification(parent.pubkey, pubkey, kind, txid, network, timestamp);
+
+  } else if (kind === KIND_PROFILE_UPDATE) {
+    const propertyKind = event.propertyKind!;
+    const propertyValue = event.propertyValue!;
+    const data: { name?: string; avatarUrl?: string; bio?: string; bot?: boolean } = {};
+    if (propertyKind === PROFILE_PROPERTY_NAME) data.name = propertyValue;
+    else if (propertyKind === PROFILE_PROPERTY_AVATAR_URL) data.avatarUrl = propertyValue;
+    else if (propertyKind === PROFILE_PROPERTY_BIO) data.bio = propertyValue;
+    else if (propertyKind === PROFILE_PROPERTY_BOT) data.bot = propertyValue === "true";
+    if (Object.keys(data).length > 0) {
+      await prisma.profile.upsert({
+        where: { pubkey_network: { pubkey, network } },
+        create: { pubkey, network, ...data, status: "confirmed" },
+        update: { ...data, status: "confirmed" },
+      });
+      await prisma.profileUpdateEvent.upsert({
+        where: { txid_network: { txid, network } },
+        create: { txid, network, pubkey, propertyKind, value: propertyValue, blockHeight, timestamp, status: "confirmed", sig },
+        update: { blockHeight, timestamp, status: "confirmed", sig },
+      });
+      console.log(`[scanner:${network}] PROFILE_UPDATE ${pubkey.slice(0, 8)}… property=${propertyKind}`);
+    }
+
+  } else if (kind === KIND_FOLLOW) {
+    await prisma.follow.upsert({
+      where: { followerPubkey_followeePubkey_network: { followerPubkey: pubkey, followeePubkey: event.targetPubkey!, network } },
+      create: { followerPubkey: pubkey, followeePubkey: event.targetPubkey!, network, isFollow: event.isFollow!, txid, blockHeight, timestamp, status: "confirmed", sig },
+      update: { isFollow: event.isFollow!, txid, blockHeight, status: "confirmed", sig },
+    });
+    console.log(`[scanner:${network}] FOLLOW ${pubkey.slice(0, 8)}… -> ${event.targetPubkey!.slice(0, 8)}… isFollow=${event.isFollow}`);
+    if (event.isFollow) {
+      await createNotification(event.targetPubkey!, pubkey, kind, txid, network, timestamp);
+    }
+  }
 }
 
 async function hasMainnetActivity(pubkey: string): Promise<boolean> {
@@ -174,250 +367,8 @@ async function scanBlock(
         continue;
       }
 
-      if (result.post.kind === KIND_TEXT_NOTE) {
-        await prisma.post.upsert({
-          where: { txid_network: { txid: tx.txid, network } },
-          create: {
-            txid: tx.txid,
-            network,
-            blockHeight: height,
-            timestamp: block.time,
-            content: result.post.content,
-            kind: result.post.kind,
-            pubkey: result.post.pubkey,
-            sig: result.post.sig,
-            status: "confirmed",
-          },
-          update: {
-            blockHeight: height,
-            timestamp: block.time,
-            status: "confirmed",
-          },
-        });
-        console.log(
-          `[scanner:${network}] Found ORS post in block ${height}: ${tx.txid}`,
-        );
-      } else if (result.post.kind === KIND_TEXT_REPLY) {
-        const reply = result.post as OrsTextReply;
-        await prisma.post.upsert({
-          where: { txid_network: { txid: tx.txid, network } },
-          create: {
-            txid: tx.txid,
-            network,
-            blockHeight: height,
-            timestamp: block.time,
-            content: reply.content,
-            kind: reply.kind,
-            pubkey: reply.pubkey,
-            sig: reply.sig,
-            parentTxid: reply.parentTxid,
-            status: "confirmed",
-          },
-          update: {
-            blockHeight: height,
-            timestamp: block.time,
-            status: "confirmed",
-          },
-        });
-        console.log(
-          `[scanner:${network}] Found ORS reply in block ${height}: ${tx.txid}`,
-        );
-        const replyParent = await prisma.post.findFirst({
-          where: {
-            txid: reply.parentTxid,
-            network: { in: ["mainnet", FREE_NETWORK] },
-          },
-          select: { pubkey: true },
-        });
-        if (replyParent) {
-          await createNotification(
-            replyParent.pubkey,
-            reply.pubkey,
-            reply.kind,
-            tx.txid,
-            network,
-            block.time,
-          );
-        }
-      } else if (result.post.kind === KIND_REPOST) {
-        const repost = result.post as OrsRepost;
-        await prisma.post.upsert({
-          where: { txid_network: { txid: tx.txid, network } },
-          create: {
-            txid: tx.txid,
-            network,
-            blockHeight: height,
-            timestamp: block.time,
-            content: "",
-            kind: repost.kind,
-            pubkey: repost.pubkey,
-            sig: repost.sig,
-            parentTxid: repost.referencedTxid,
-            status: "confirmed",
-          },
-          update: {
-            blockHeight: height,
-            timestamp: block.time,
-            status: "confirmed",
-          },
-        });
-        console.log(
-          `[scanner:${network}] Found ORS repost in block ${height}: ${tx.txid}`,
-        );
-        const repostParent = await prisma.post.findFirst({
-          where: {
-            txid: repost.referencedTxid,
-            network: { in: ["mainnet", FREE_NETWORK] },
-          },
-          select: { pubkey: true },
-        });
-        if (repostParent) {
-          await createNotification(
-            repostParent.pubkey,
-            repost.pubkey,
-            repost.kind,
-            tx.txid,
-            network,
-            block.time,
-          );
-        }
-      } else if (result.post.kind === KIND_QUOTE_REPOST) {
-        const quote = result.post as OrsQuoteRepost;
-        await prisma.post.upsert({
-          where: { txid_network: { txid: tx.txid, network } },
-          create: {
-            txid: tx.txid,
-            network,
-            blockHeight: height,
-            timestamp: block.time,
-            content: quote.content,
-            kind: quote.kind,
-            pubkey: quote.pubkey,
-            sig: quote.sig,
-            parentTxid: quote.referencedTxid,
-            status: "confirmed",
-          },
-          update: {
-            blockHeight: height,
-            timestamp: block.time,
-            status: "confirmed",
-          },
-        });
-        console.log(
-          `[scanner:${network}] Found ORS quote-repost in block ${height}: ${tx.txid}`,
-        );
-        const quoteParent = await prisma.post.findFirst({
-          where: {
-            txid: quote.referencedTxid,
-            network: { in: ["mainnet", FREE_NETWORK] },
-          },
-          select: { pubkey: true },
-        });
-        if (quoteParent) {
-          await createNotification(
-            quoteParent.pubkey,
-            quote.pubkey,
-            quote.kind,
-            tx.txid,
-            network,
-            block.time,
-          );
-        }
-      } else if (result.post.kind === KIND_PROFILE_UPDATE) {
-        const update = result.post as OrsProfileUpdate;
-        const data: {
-          name?: string;
-          avatarUrl?: string;
-          bio?: string;
-          bot?: boolean;
-        } = {};
-        if (update.propertyKind === PROFILE_PROPERTY_NAME)
-          data.name = update.content;
-        else if (update.propertyKind === PROFILE_PROPERTY_AVATAR_URL)
-          data.avatarUrl = update.content;
-        else if (update.propertyKind === PROFILE_PROPERTY_BIO)
-          data.bio = update.content;
-        else if (update.propertyKind === PROFILE_PROPERTY_BOT)
-          data.bot = update.content === "true";
-
-        if (Object.keys(data).length > 0) {
-          await prisma.profile.upsert({
-            where: { pubkey_network: { pubkey: update.pubkey, network } },
-            create: {
-              pubkey: update.pubkey,
-              network,
-              ...data,
-              status: "confirmed",
-            },
-            update: { ...data, status: "confirmed" },
-          });
-          await prisma.profileUpdateEvent.upsert({
-            where: { txid_network: { txid: tx.txid, network } },
-            create: {
-              txid: tx.txid,
-              network,
-              pubkey: update.pubkey,
-              propertyKind: update.propertyKind,
-              value: update.content,
-              blockHeight: height,
-              timestamp: block.time,
-              status: "confirmed",
-              sig: update.sig,
-            },
-            update: {
-              blockHeight: height,
-              timestamp: block.time,
-              status: "confirmed",
-              sig: update.sig,
-            },
-          });
-          console.log(
-            `[scanner:${network}] Profile update in block ${height}: ${update.pubkey.slice(0, 8)}… property=${update.propertyKind}`,
-          );
-        }
-      } else if (result.post.kind === KIND_FOLLOW) {
-        const follow = result.post as OrsFollow;
-        await prisma.follow.upsert({
-          where: {
-            followerPubkey_followeePubkey_network: {
-              followerPubkey: follow.pubkey,
-              followeePubkey: follow.targetPubkey,
-              network,
-            },
-          },
-          create: {
-            followerPubkey: follow.pubkey,
-            followeePubkey: follow.targetPubkey,
-            network,
-            isFollow: follow.isFollow,
-            txid: tx.txid,
-            blockHeight: height,
-            timestamp: block.time,
-            status: "confirmed",
-            sig: follow.sig,
-          },
-          update: {
-            isFollow: follow.isFollow,
-            txid: tx.txid,
-            blockHeight: height,
-            status: "confirmed",
-            sig: follow.sig,
-          },
-        });
-        console.log(
-          `[scanner:${network}] Follow in block ${height}: ${follow.pubkey.slice(0, 8)}… -> ${follow.targetPubkey.slice(0, 8)}… isFollow=${follow.isFollow}`,
-        );
-        if (follow.isFollow) {
-          await createNotification(
-            follow.targetPubkey,
-            follow.pubkey,
-            follow.kind,
-            tx.txid,
-            network,
-            block.time,
-          );
-        }
-      }
+      const event = normalizeV0(result.post, tx.txid, network, height, block.time);
+      if (event) await processDecodedEvent(event);
     }
   }
 
@@ -604,216 +555,6 @@ async function checkMempoolEvictions(
   }
 }
 
-async function storeV1Post(
-  txid: string,
-  network: string,
-  pubkey: Uint8Array,
-  sig: Uint8Array,
-  kind: number,
-  kindData: Uint8Array,
-  blockHeight: number,
-  timestamp: number,
-): Promise<void> {
-  const pubkeyHex = bytesToHex(pubkey);
-  const sigHex = bytesToHex(sig);
-
-  if (kind === KIND_TEXT_NOTE) {
-    await prisma.post.upsert({
-      where: { txid_network: { txid, network } },
-      create: {
-        txid,
-        network,
-        blockHeight,
-        timestamp,
-        content: new TextDecoder().decode(kindData),
-        kind,
-        pubkey: pubkeyHex,
-        sig: sigHex,
-        status: "confirmed",
-      },
-      update: { blockHeight, timestamp, status: "confirmed" },
-    });
-    console.log(`[scanner:${network}] v1 assembled TEXT_NOTE ${txid}`);
-  } else if (kind === KIND_TEXT_REPLY) {
-    if (kindData.length < 32) return;
-    const parentTxid = bytesToHex(kindData.subarray(0, 32));
-    const content = new TextDecoder().decode(kindData.subarray(32));
-    await prisma.post.upsert({
-      where: { txid_network: { txid, network } },
-      create: {
-        txid,
-        network,
-        blockHeight,
-        timestamp,
-        content,
-        kind,
-        pubkey: pubkeyHex,
-        sig: sigHex,
-        parentTxid,
-        status: "confirmed",
-      },
-      update: { blockHeight, timestamp, status: "confirmed" },
-    });
-    console.log(`[scanner:${network}] v1 assembled TEXT_REPLY ${txid}`);
-    const replyParent = await prisma.post.findFirst({
-      where: { txid: parentTxid, network: { in: ["mainnet", FREE_NETWORK] } },
-      select: { pubkey: true },
-    });
-    if (replyParent) {
-      await createNotification(
-        replyParent.pubkey,
-        pubkeyHex,
-        kind,
-        txid,
-        network,
-        timestamp,
-      );
-    }
-  } else if (kind === KIND_REPOST) {
-    if (kindData.length < 32) return;
-    const parentTxid = bytesToHex(kindData.subarray(0, 32));
-    await prisma.post.upsert({
-      where: { txid_network: { txid, network } },
-      create: {
-        txid,
-        network,
-        blockHeight,
-        timestamp,
-        content: "",
-        kind,
-        pubkey: pubkeyHex,
-        sig: sigHex,
-        parentTxid,
-        status: "confirmed",
-      },
-      update: { blockHeight, timestamp, status: "confirmed" },
-    });
-    console.log(`[scanner:${network}] v1 assembled REPOST ${txid}`);
-    const repostParent = await prisma.post.findFirst({
-      where: { txid: parentTxid, network: { in: ["mainnet", FREE_NETWORK] } },
-      select: { pubkey: true },
-    });
-    if (repostParent) {
-      await createNotification(
-        repostParent.pubkey,
-        pubkeyHex,
-        kind,
-        txid,
-        network,
-        timestamp,
-      );
-    }
-  } else if (kind === KIND_QUOTE_REPOST) {
-    if (kindData.length < 32) return;
-    const parentTxid = bytesToHex(kindData.subarray(0, 32));
-    const content = new TextDecoder().decode(kindData.subarray(32));
-    await prisma.post.upsert({
-      where: { txid_network: { txid, network } },
-      create: {
-        txid,
-        network,
-        blockHeight,
-        timestamp,
-        content,
-        kind,
-        pubkey: pubkeyHex,
-        sig: sigHex,
-        parentTxid,
-        status: "confirmed",
-      },
-      update: { blockHeight, timestamp, status: "confirmed" },
-    });
-    console.log(`[scanner:${network}] v1 assembled QUOTE_REPOST ${txid}`);
-    const quoteParent = await prisma.post.findFirst({
-      where: { txid: parentTxid, network: { in: ["mainnet", FREE_NETWORK] } },
-      select: { pubkey: true },
-    });
-    if (quoteParent) {
-      await createNotification(
-        quoteParent.pubkey,
-        pubkeyHex,
-        kind,
-        txid,
-        network,
-        timestamp,
-      );
-    }
-  } else if (kind === KIND_PROFILE_UPDATE) {
-    if (kindData.length < 1) return;
-    const propertyKind = kindData[0];
-    const valueBytes = kindData.subarray(1);
-    const data: { name?: string; avatarUrl?: string; bio?: string } = {};
-    if (propertyKind === PROFILE_PROPERTY_NAME)
-      data.name = new TextDecoder().decode(valueBytes);
-    else if (propertyKind === PROFILE_PROPERTY_AVATAR_URL)
-      data.avatarUrl = new TextDecoder().decode(valueBytes);
-    else if (propertyKind === PROFILE_PROPERTY_BIO)
-      data.bio = new TextDecoder().decode(valueBytes);
-    if (Object.keys(data).length > 0) {
-      const valueStr = new TextDecoder().decode(valueBytes);
-      await prisma.profile.upsert({
-        where: { pubkey_network: { pubkey: pubkeyHex, network } },
-        create: { pubkey: pubkeyHex, network, ...data, status: "confirmed" },
-        update: { ...data, status: "confirmed" },
-      });
-      await prisma.profileUpdateEvent.upsert({
-        where: { txid_network: { txid, network } },
-        create: {
-          txid,
-          network,
-          pubkey: pubkeyHex,
-          propertyKind,
-          value: valueStr,
-          blockHeight,
-          timestamp,
-          status: "confirmed",
-        },
-        update: { blockHeight, timestamp, status: "confirmed" },
-      });
-      console.log(
-        `[scanner:${network}] v1 assembled PROFILE_UPDATE ${pubkeyHex.slice(0, 8)}… property=${propertyKind}`,
-      );
-    }
-  } else if (kind === KIND_FOLLOW) {
-    if (kindData.length < 33) return;
-    const targetPubkey = bytesToHex(kindData.subarray(0, 32));
-    const isFollow = kindData[32] === 0x01;
-    await prisma.follow.upsert({
-      where: {
-        followerPubkey_followeePubkey_network: {
-          followerPubkey: pubkeyHex,
-          followeePubkey: targetPubkey,
-          network,
-        },
-      },
-      create: {
-        followerPubkey: pubkeyHex,
-        followeePubkey: targetPubkey,
-        network,
-        isFollow,
-        txid,
-        blockHeight,
-        timestamp,
-        status: "confirmed",
-      },
-      update: { isFollow, txid, blockHeight, status: "confirmed" },
-    });
-    console.log(
-      `[scanner:${network}] v1 assembled FOLLOW ${pubkeyHex.slice(0, 8)}… -> ${targetPubkey.slice(0, 8)}… isFollow=${isFollow}`,
-    );
-    if (isFollow) {
-      await createNotification(
-        targetPubkey,
-        pubkeyHex,
-        KIND_FOLLOW,
-        txid,
-        network,
-        timestamp,
-      );
-    }
-  }
-}
-
 function* cartesianProduct<T>(arrays: T[][]): Generator<T[]> {
   if (arrays.length === 0) {
     yield [];
@@ -881,16 +622,8 @@ async function assembleV1Chunks(
         }
       }*/
 
-      await storeV1Post(
-        c0.txid,
-        network,
-        assembled.pubkey,
-        assembled.sig,
-        assembled.kind,
-        assembled.kindData,
-        c0.blockHeight,
-        c0.timestamp,
-      );
+      const event = normalizeV1(c0.txid, network, assembled.pubkey, assembled.sig, assembled.kind, assembled.kindData, c0.blockHeight, c0.timestamp);
+      if (event) await processDecodedEvent(event);
 
       const assembledTxids = [c0.txid];
       for (let n = 1; n < totalChunks; n++) {
