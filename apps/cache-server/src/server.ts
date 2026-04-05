@@ -1068,7 +1068,37 @@ export function createServer() {
     const hasMore = deduped.length > limit;
     const page = deduped.slice(0, limit);
 
-    res.json({ notifications: page, hasMore });
+    // Enrich with truncated content from Post table
+    const postKinds = new Set([KIND_TEXT_REPLY, KIND_REPOST, KIND_QUOTE_REPOST]);
+    const notifTxids = page.filter((n) => postKinds.has(n.kind)).map((n) => n.txid);
+    const actorPosts = notifTxids.length > 0
+      ? await prisma.post.findMany({
+          where: { txid: { in: notifTxids } },
+          select: { txid: true, content: true, parentTxid: true },
+        })
+      : [];
+    const actorPostMap = new Map(actorPosts.map((p) => [p.txid, p]));
+
+    const parentTxids = actorPosts.map((p) => p.parentTxid).filter(Boolean) as string[];
+    const parentPosts = parentTxids.length > 0
+      ? await prisma.post.findMany({
+          where: { txid: { in: parentTxids } },
+          select: { txid: true, content: true },
+        })
+      : [];
+    const parentPostMap = new Map(parentPosts.map((p) => [p.txid, p]));
+
+    const enriched = page.map((n) => {
+      const actorPost = actorPostMap.get(n.txid);
+      const parentPost = actorPost?.parentTxid ? parentPostMap.get(actorPost.parentTxid) : undefined;
+      return {
+        ...n,
+        actorContent: actorPost?.content ? actorPost.content.slice(0, 100) : undefined,
+        parentContent: parentPost?.content ? parentPost.content.slice(0, 100) : undefined,
+      };
+    });
+
+    res.json({ notifications: enriched, hasMore });
   });
 
   app.get("/notifications/:pubkey/unread-count", async (req, res) => {

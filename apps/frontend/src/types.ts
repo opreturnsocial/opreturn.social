@@ -45,6 +45,8 @@ export interface Notification {
   txid: string;
   network: string;
   timestamp: number;
+  actorContent?: string;
+  parentContent?: string;
 }
 
 export type FeedItem =

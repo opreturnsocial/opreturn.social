@@ -10,7 +10,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import { formatRelativeTime } from "../lib/utils";
 import { AvatarCircle } from "../components/AvatarCircle";
-import { KIND_TEXT_REPLY, KIND_REPOST, KIND_QUOTE_REPOST, KIND_FOLLOW } from "../lib/ors";
+import {
+  KIND_TEXT_REPLY,
+  KIND_REPOST,
+  KIND_QUOTE_REPOST,
+  KIND_FOLLOW,
+} from "../lib/ors";
 import type { Notification, Profile } from "../types";
 
 interface NotificationsPageProps {
@@ -38,7 +43,9 @@ function NotificationRow({
 
   switch (n.kind) {
     case KIND_TEXT_REPLY:
-      icon = <CornerDownLeftIcon className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />;
+      icon = (
+        <CornerDownLeftIcon className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
+      );
       label = (
         <>
           <strong>{actorName}</strong> replied to your post
@@ -46,7 +53,9 @@ function NotificationRow({
       );
       break;
     case KIND_REPOST:
-      icon = <Repeat2Icon className="h-3.5 w-3.5 text-green-400 flex-shrink-0" />;
+      icon = (
+        <Repeat2Icon className="h-3.5 w-3.5 text-green-400 flex-shrink-0" />
+      );
       label = (
         <>
           <strong>{actorName}</strong> reposted your post
@@ -54,7 +63,9 @@ function NotificationRow({
       );
       break;
     case KIND_QUOTE_REPOST:
-      icon = <QuoteIcon className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" />;
+      icon = (
+        <QuoteIcon className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" />
+      );
       label = (
         <>
           <strong>{actorName}</strong> quote-reposted your post
@@ -62,7 +73,9 @@ function NotificationRow({
       );
       break;
     case KIND_FOLLOW:
-      icon = <UserPlusIcon className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />;
+      icon = (
+        <UserPlusIcon className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+      );
       label = (
         <>
           <strong>{actorName}</strong> followed you
@@ -73,7 +86,8 @@ function NotificationRow({
       return null;
   }
 
-  const href = n.kind === 6 ? `/profile/${n.actorPubkey}` : `/tx/${n.txid}`;
+  const href =
+    n.kind === KIND_FOLLOW ? `/profile/${n.actorPubkey}` : `/tx/${n.txid}`;
 
   return (
     <Link
@@ -86,6 +100,16 @@ function NotificationRow({
           {icon}
           <p className="text-sm">{label}</p>
         </div>
+        {n.parentContent && (
+          <p className="text-xs text-muted-foreground mt-0.5 truncate border-l-2 border-border pl-2">
+            {n.parentContent}
+          </p>
+        )}
+        {n.actorContent && (
+          <p className="text-xs text-foreground/80 mt-1 truncate">
+            {n.actorContent}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground mt-0.5">
           {formatRelativeTime(n.timestamp)}
         </p>
@@ -108,7 +132,10 @@ export function NotificationsPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const sentinelRef = useInfiniteScroll(hasMore ? onLoadMore : undefined, loading);
+  const sentinelRef = useInfiniteScroll(
+    hasMore ? onLoadMore : undefined,
+    loading,
+  );
 
   if (!loggedInPubkey) {
     return (
@@ -142,7 +169,11 @@ export function NotificationsPage({
       {notifications.length > 0 && (
         <div className="rounded-lg border border-border overflow-hidden">
           {notifications.map((n) => (
-            <NotificationRow key={`${n.txid}-${n.network}`} n={n} profiles={profiles} />
+            <NotificationRow
+              key={`${n.txid}-${n.network}`}
+              n={n}
+              profiles={profiles}
+            />
           ))}
         </div>
       )}
