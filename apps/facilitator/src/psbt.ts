@@ -133,6 +133,80 @@ export function buildPayloadProfile(
   return bytesToHex(payload);
 }
 
+// ─── auto-detect (v0 or v1) ──────────────────────────────────────────────────
+
+export interface AutoPayload {
+  payloadHex: string;  // non-empty for v0
+  chunks: string[];    // non-empty for v1
+  protocolVersion: 0 | 1;
+}
+
+export function buildPayloadAutoDetect(content: string, pubkey: string, sig: string): AutoPayload {
+  try {
+    return { payloadHex: "", chunks: buildPayloadV1(content, pubkey, sig), protocolVersion: 1 };
+  } catch (e) {
+    if (e instanceof Error && e.message === "Invalid Schnorr signature") {
+      return { payloadHex: buildPayload(content, pubkey, sig), chunks: [], protocolVersion: 0 };
+    }
+    throw e;
+  }
+}
+
+export function buildPayloadReplyAutoDetect(content: string, pubkey: string, sig: string, parentTxid: string): AutoPayload {
+  try {
+    return { payloadHex: "", chunks: buildPayloadReplyV1(content, pubkey, sig, parentTxid), protocolVersion: 1 };
+  } catch (e) {
+    if (e instanceof Error && e.message === "Invalid Schnorr signature") {
+      return { payloadHex: buildPayloadReply(content, pubkey, sig, parentTxid), chunks: [], protocolVersion: 0 };
+    }
+    throw e;
+  }
+}
+
+export function buildPayloadRepostAutoDetect(pubkey: string, sig: string, referencedTxid: string): AutoPayload {
+  try {
+    return { payloadHex: "", chunks: buildPayloadRepostV1(pubkey, sig, referencedTxid), protocolVersion: 1 };
+  } catch (e) {
+    if (e instanceof Error && e.message === "Invalid Schnorr signature") {
+      return { payloadHex: buildPayloadRepost(pubkey, sig, referencedTxid), chunks: [], protocolVersion: 0 };
+    }
+    throw e;
+  }
+}
+
+export function buildPayloadQuoteRepostAutoDetect(content: string, pubkey: string, sig: string, referencedTxid: string): AutoPayload {
+  try {
+    return { payloadHex: "", chunks: buildPayloadQuoteRepostV1(content, pubkey, sig, referencedTxid), protocolVersion: 1 };
+  } catch (e) {
+    if (e instanceof Error && e.message === "Invalid Schnorr signature") {
+      return { payloadHex: buildPayloadQuoteRepost(content, pubkey, sig, referencedTxid), chunks: [], protocolVersion: 0 };
+    }
+    throw e;
+  }
+}
+
+export function buildPayloadFollowAutoDetect(targetPubkey: string, isFollow: boolean, pubkey: string, sig: string): AutoPayload {
+  try {
+    return { payloadHex: "", chunks: buildPayloadFollowV1(targetPubkey, isFollow, pubkey, sig), protocolVersion: 1 };
+  } catch (e) {
+    if (e instanceof Error && e.message === "Invalid Schnorr signature") {
+      return { payloadHex: buildPayloadFollow(targetPubkey, isFollow, pubkey, sig), chunks: [], protocolVersion: 0 };
+    }
+    throw e;
+  }
+}
+
+export function buildPayloadProfileAutoDetect(propertyKind: number, value: string, pubkey: string, sig: string): AutoPayload {
+  try {
+    return { payloadHex: "", chunks: buildPayloadProfileV1(propertyKind, value, pubkey, sig), protocolVersion: 1 };
+  } catch (e) {
+    if (e instanceof Error && e.message === "Invalid Schnorr signature") {
+      return { payloadHex: buildPayloadProfile(propertyKind, value, pubkey, sig), chunks: [], protocolVersion: 0 };
+    }
+    throw e;
+  }
+}
+
 // ─── v1 (chunked 80-byte OP_RETURN) ─────────────────────────────────────────
 
 function verifyV1Schnorr(pubkeyBuf: Buffer, kind: number, kindData: Buffer, sig: string): void {

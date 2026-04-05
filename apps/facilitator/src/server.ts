@@ -13,6 +13,12 @@ import {
   buildPayloadQuoteRepostV1,
   buildPayloadFollowV1,
   buildPayloadProfileV1,
+  buildPayloadAutoDetect,
+  buildPayloadReplyAutoDetect,
+  buildPayloadRepostAutoDetect,
+  buildPayloadQuoteRepostAutoDetect,
+  buildPayloadFollowAutoDetect,
+  buildPayloadProfileAutoDetect,
 } from "./psbt.js";
 import {
   generatePreimage,
@@ -805,7 +811,9 @@ export function createServer() {
     }
     try {
       // Fetch tx data from cache server - no bitcoin RPC needed
-      let chunks: string[];
+      let chunks: string[] = [];
+      let payloadHex = "";
+      let detectedVersion: number = 1;
       let pubkey: string;
       let resolvedData: Record<string, unknown>;
 
@@ -827,14 +835,15 @@ export function createServer() {
           sig: post.sig,
           parentTxid: post.parentTxid,
         };
+        let autoResult;
         if (post.kind === 0x01) {
-          chunks = buildPayloadV1(post.content, post.pubkey, post.sig);
+          autoResult = buildPayloadAutoDetect(post.content, post.pubkey, post.sig);
         } else if (post.kind === 0x03) {
           if (!post.parentTxid) {
             res.status(400).json({ error: "Reply is missing parentTxid" });
             return;
           }
-          chunks = buildPayloadReplyV1(
+          autoResult = buildPayloadReplyAutoDetect(
             post.content,
             post.pubkey,
             post.sig,
@@ -845,7 +854,7 @@ export function createServer() {
             res.status(400).json({ error: "Repost is missing parentTxid" });
             return;
           }
-          chunks = buildPayloadRepostV1(post.pubkey, post.sig, post.parentTxid);
+          autoResult = buildPayloadRepostAutoDetect(post.pubkey, post.sig, post.parentTxid);
         } else if (post.kind === 0x05) {
           if (!post.parentTxid) {
             res
@@ -853,7 +862,7 @@ export function createServer() {
               .json({ error: "Quote repost is missing parentTxid" });
             return;
           }
-          chunks = buildPayloadQuoteRepostV1(
+          autoResult = buildPayloadQuoteRepostAutoDetect(
             post.content,
             post.pubkey,
             post.sig,
@@ -865,6 +874,9 @@ export function createServer() {
             .json({ error: `Unsupported post kind: ${post.kind}` });
           return;
         }
+        chunks = autoResult.chunks;
+        payloadHex = autoResult.payloadHex;
+        detectedVersion = autoResult.protocolVersion;
       } else {
         const actRes = await fetch(
           `${CACHE_SERVER_URL}/activity/${testnetTxid}`,
@@ -900,12 +912,13 @@ export function createServer() {
           propertyKind: item.propertyKind,
           value: item.value,
         };
+        let autoResult;
         if (item.type === "follow" || item.type === "unfollow") {
           if (!item.targetPubkey) {
             res.status(400).json({ error: "Follow is missing targetPubkey" });
             return;
           }
-          chunks = buildPayloadFollowV1(
+          autoResult = buildPayloadFollowAutoDetect(
             item.targetPubkey,
             item.type === "follow",
             item.pubkey,
@@ -918,7 +931,7 @@ export function createServer() {
             });
             return;
           }
-          chunks = buildPayloadProfileV1(
+          autoResult = buildPayloadProfileAutoDetect(
             item.propertyKind,
             item.value,
             item.pubkey,
@@ -930,6 +943,9 @@ export function createServer() {
             .json({ error: `Unsupported activity type: ${item.type}` });
           return;
         }
+        chunks = autoResult.chunks;
+        payloadHex = autoResult.payloadHex;
+        detectedVersion = autoResult.protocolVersion;
       }
 
       const priority = feePriority === "high" ? "high" : "medium";
@@ -943,7 +959,9 @@ export function createServer() {
         });
         return;
       }
-      const estimatedFeeSats = calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
+      const estimatedFeeSats = detectedVersion === 0
+        ? calcEstimatedFeeSats(payloadHex, effectiveFeeRate)
+        : calcEstimatedFeeSatsV1(chunks, effectiveFeeRate);
       const walletBalanceBtc = await getWalletBalance();
       if (walletBalanceBtc < estimatedFeeSats / 1e8) {
         res.status(503).json({
@@ -955,12 +973,12 @@ export function createServer() {
       const result = await preparePending(
         "sponsor",
         pubkey,
-        "",
+        payloadHex,
         estimatedFeeSats,
         effectiveFeeRate,
         { ...req.body, ...resolvedData },
-        1,
-        JSON.stringify(chunks),
+        detectedVersion,
+        detectedVersion === 1 ? JSON.stringify(chunks) : undefined,
       );
       res.json({ ok: true, ...result });
     } catch (err) {
