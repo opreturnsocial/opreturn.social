@@ -458,6 +458,8 @@ async function handleFreeNetworkAction(
   buildV1: () => string[],
   requestBody: object,
   res: express.Response,
+  buildV0: () => string,
+  protocolVersion = 1,
 ): Promise<void> {
   try {
     // Rate limit
@@ -470,19 +472,26 @@ async function handleFreeNetworkAction(
     );
     const feeRateBtcPerKb = feeRateSatPerVByte / 1e5;
 
-    const chunks = buildV1();
-    if (chunks.length > MAX_CHUNKS_PER_REQUEST) {
-      res.status(400).json({
-        error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}`,
-      });
-      return;
+    let payloadHex = "";
+    let chunksJson: string | undefined;
+
+    if (protocolVersion === 0 && buildV0) {
+      payloadHex = buildV0();
+    } else {
+      const chunks = buildV1();
+      if (chunks.length > MAX_CHUNKS_PER_REQUEST) {
+        res.status(400).json({
+          error: `Payload exceeds maximum chunk limit of ${MAX_CHUNKS_PER_REQUEST}`,
+        });
+        return;
+      }
+      chunksJson = chunks.length > 0 ? JSON.stringify(chunks) : undefined;
     }
-    const chunksJson = chunks.length > 0 ? JSON.stringify(chunks) : undefined;
 
     const { txid } = await broadcastFreeNetwork(
       action,
       pubkey,
-      "",
+      payloadHex,
       chunksJson,
       feeRateBtcPerKb,
       requestBody,
@@ -1003,6 +1012,8 @@ export function createServer() {
       () => buildPayloadV1(content, pubkey, sig),
       { content, pubkey, sig, protocolVersion: pv ?? 1 },
       res,
+      () => buildPayload(content, pubkey, sig),
+      pv ?? 1,
     );
   });
 
@@ -1037,6 +1048,8 @@ export function createServer() {
       () => buildPayloadReplyV1(content, pubkey, sig, parentTxid),
       { content, pubkey, sig, parentTxid, protocolVersion: pv ?? 1 },
       res,
+      () => buildPayloadReply(content, pubkey, sig, parentTxid),
+      pv ?? 1,
     );
   });
 
@@ -1069,6 +1082,8 @@ export function createServer() {
       () => buildPayloadRepostV1(pubkey, sig, referencedTxid),
       { pubkey, sig, referencedTxid, protocolVersion: pv ?? 1 },
       res,
+      () => buildPayloadRepost(pubkey, sig, referencedTxid),
+      pv ?? 1,
     );
   });
 
@@ -1103,6 +1118,8 @@ export function createServer() {
       () => buildPayloadQuoteRepostV1(content, pubkey, sig, referencedTxid),
       { content, pubkey, sig, referencedTxid, protocolVersion: pv ?? 1 },
       res,
+      () => buildPayloadQuoteRepost(content, pubkey, sig, referencedTxid),
+      pv ?? 1,
     );
   });
 
@@ -1137,6 +1154,8 @@ export function createServer() {
       () => buildPayloadFollowV1(targetPubkey, isFollow, pubkey, sig),
       { targetPubkey, isFollow, pubkey, sig, protocolVersion: pv ?? 1 },
       res,
+      () => buildPayloadFollow(targetPubkey, isFollow, pubkey, sig),
+      pv ?? 1,
     );
   });
 
@@ -1171,6 +1190,8 @@ export function createServer() {
       () => buildPayloadProfileV1(propertyKind, value, pubkey, sig),
       { propertyKind, value, pubkey, sig, protocolVersion: pv ?? 1 },
       res,
+      () => buildPayloadProfile(propertyKind, value, pubkey, sig),
+      pv ?? 1,
     );
   });
 
