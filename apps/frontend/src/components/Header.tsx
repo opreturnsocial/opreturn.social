@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CornerDownLeftIcon, User, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
+import { NotificationBell } from "./NotificationBell";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -24,6 +25,7 @@ interface HeaderProps {
   onAgents: () => void;
   onLogout: () => void;
   onTopUp?: () => void;
+  unreadNotificationCount?: number;
 }
 
 export function Header({
@@ -37,6 +39,7 @@ export function Header({
   onAgents,
   onLogout,
   onTopUp,
+  unreadNotificationCount = 0,
 }: HeaderProps) {
   const { feeRateMedium, blockHeight, btcPriceUsd } = useNetworkStats();
   const [statIndex, setStatIndex] = useState(0);
@@ -101,6 +104,9 @@ export function Header({
                 <Skeleton className="h-3.5 w-12 inline-block" />
               )}
             </button>
+          )}
+          {loggedInPubkey !== null && (
+            <NotificationBell unreadCount={unreadNotificationCount} />
           )}
           {loggedInPubkey === null ? (
             <button

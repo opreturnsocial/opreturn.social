@@ -21,7 +21,9 @@ import { ProfilePage } from "./pages/ProfilePage";
 import { AuthPage } from "./pages/AuthPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AgentsPage } from "./pages/AgentsPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 import { useFeed } from "./hooks/useFeed";
+import { useNotifications } from "./hooks/useNotifications";
 import { useWalletBalance } from "./hooks/useWalletBalance";
 import {
   fetchProfiles,
@@ -71,6 +73,15 @@ export function App() {
   const allPosts = feedItems.flatMap((i) => (i.feedType === "post" ? [i] : []));
   const allActivityItems = feedItems.flatMap((i) => (i.feedType === "activity" ? [i] : []));
   const [walletBalance, refreshWalletBalance] = useWalletBalance();
+  const {
+    unreadCount: unreadNotificationCount,
+    notifications,
+    loading: notificationsLoading,
+    hasMore: notificationsHasMore,
+    markAllRead,
+    loadNotifications,
+    loadMore: loadMoreNotifications,
+  } = useNotifications(loggedInPubkey);
 
   async function refreshProfiles() {
     try {
@@ -195,6 +206,7 @@ export function App() {
                 onTopUp={
                   loggedInPubkey ? () => setFundWalletOpen(true) : undefined
                 }
+                unreadNotificationCount={unreadNotificationCount}
               />
 
               <main className="container max-w-2xl mx-auto px-4 py-6">
@@ -231,6 +243,23 @@ export function App() {
                   <Route path="/activity/:txid" element={<TxRedirect />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agents" element={<AgentsPage />} />
+                  <Route
+                    path="/notifications"
+                    element={
+                      <NotificationsPage
+                        loggedInPubkey={loggedInPubkey}
+                        profiles={profiles}
+                        notifications={notifications}
+                        loading={notificationsLoading}
+                        hasMore={notificationsHasMore}
+                        onMount={() => {
+                          loadNotifications();
+                          markAllRead();
+                        }}
+                        onLoadMore={loadMoreNotifications}
+                      />
+                    }
+                  />
                   <Route
                     path="/profile/:pubkey"
                     element={

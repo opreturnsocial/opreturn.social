@@ -67,6 +67,25 @@ async function getOrCreateScannerState(network: string): Promise<number> {
   return state.lastBlock;
 }
 
+async function createNotification(
+  recipientPubkey: string,
+  actorPubkey: string,
+  kind: number,
+  txid: string,
+  network: string,
+  timestamp: number,
+): Promise<void> {
+  if (recipientPubkey === actorPubkey) return;
+  console.log(
+    `[scanner:${network}] creating notification ${txid} from ${actorPubkey} to ${recipientPubkey}`,
+  );
+  await prisma.notification.upsert({
+    where: { txid_network: { txid, network } },
+    create: { recipientPubkey, actorPubkey, kind, txid, network, timestamp },
+    update: {},
+  });
+}
+
 async function hasMainnetActivity(pubkey: string): Promise<boolean> {
   const [post, profile] = await Promise.all([
     prisma.post.findFirst({
@@ -127,8 +146,8 @@ async function scanBlock(
       const result = parseORSPayload(payload);
       if (!result.supported) continue;
 
-      // Free network mainnet-activity gate
-      if (network !== "mainnet") {
+      // Free network mainnet-activity gate (disabled)
+      /*if (network !== "mainnet") {
         const active = await hasMainnetActivity(result.post.pubkey);
         if (!active) {
           console.log(
@@ -136,7 +155,7 @@ async function scanBlock(
           );
           continue;
         }
-      }
+      }*/
 
       const unsignedBytes = getUnsignedBytes(payload);
       const msgHash = crypto
@@ -203,6 +222,23 @@ async function scanBlock(
         console.log(
           `[scanner:${network}] Found ORS reply in block ${height}: ${tx.txid}`,
         );
+        const replyParent = await prisma.post.findFirst({
+          where: {
+            txid: reply.parentTxid,
+            network: { in: ["mainnet", FREE_NETWORK] },
+          },
+          select: { pubkey: true },
+        });
+        if (replyParent) {
+          await createNotification(
+            replyParent.pubkey,
+            reply.pubkey,
+            reply.kind,
+            tx.txid,
+            network,
+            block.time,
+          );
+        }
       } else if (result.post.kind === KIND_REPOST) {
         const repost = result.post as OrsRepost;
         await prisma.post.upsert({
@@ -228,6 +264,23 @@ async function scanBlock(
         console.log(
           `[scanner:${network}] Found ORS repost in block ${height}: ${tx.txid}`,
         );
+        const repostParent = await prisma.post.findFirst({
+          where: {
+            txid: repost.referencedTxid,
+            network: { in: ["mainnet", FREE_NETWORK] },
+          },
+          select: { pubkey: true },
+        });
+        if (repostParent) {
+          await createNotification(
+            repostParent.pubkey,
+            repost.pubkey,
+            repost.kind,
+            tx.txid,
+            network,
+            block.time,
+          );
+        }
       } else if (result.post.kind === KIND_QUOTE_REPOST) {
         const quote = result.post as OrsQuoteRepost;
         await prisma.post.upsert({
@@ -253,6 +306,23 @@ async function scanBlock(
         console.log(
           `[scanner:${network}] Found ORS quote-repost in block ${height}: ${tx.txid}`,
         );
+        const quoteParent = await prisma.post.findFirst({
+          where: {
+            txid: quote.referencedTxid,
+            network: { in: ["mainnet", FREE_NETWORK] },
+          },
+          select: { pubkey: true },
+        });
+        if (quoteParent) {
+          await createNotification(
+            quoteParent.pubkey,
+            quote.pubkey,
+            quote.kind,
+            tx.txid,
+            network,
+            block.time,
+          );
+        }
       } else if (result.post.kind === KIND_PROFILE_UPDATE) {
         const update = result.post as OrsProfileUpdate;
         const data: {
@@ -337,6 +407,16 @@ async function scanBlock(
         console.log(
           `[scanner:${network}] Follow in block ${height}: ${follow.pubkey.slice(0, 8)}… -> ${follow.targetPubkey.slice(0, 8)}… isFollow=${follow.isFollow}`,
         );
+        if (follow.isFollow) {
+          await createNotification(
+            follow.targetPubkey,
+            follow.pubkey,
+            follow.kind,
+            tx.txid,
+            network,
+            block.time,
+          );
+        }
       }
     }
   }
@@ -391,6 +471,7 @@ async function checkReorg(network: string, rpc: RpcClient): Promise<void> {
         },
         data: { status: "pending", blockHeight: 0 },
       });
+      // TODO: handle notifications
       await prisma.scannerState.upsert({
         where: { network },
         update: { lastBlock: record.height - 1 },
@@ -574,6 +655,20 @@ async function storeV1Post(
       update: { blockHeight, timestamp, status: "confirmed" },
     });
     console.log(`[scanner:${network}] v1 assembled TEXT_REPLY ${txid}`);
+    const replyParent = await prisma.post.findFirst({
+      where: { txid: parentTxid, network: { in: ["mainnet", FREE_NETWORK] } },
+      select: { pubkey: true },
+    });
+    if (replyParent) {
+      await createNotification(
+        replyParent.pubkey,
+        pubkeyHex,
+        kind,
+        txid,
+        network,
+        timestamp,
+      );
+    }
   } else if (kind === KIND_REPOST) {
     if (kindData.length < 32) return;
     const parentTxid = bytesToHex(kindData.subarray(0, 32));
@@ -594,6 +689,20 @@ async function storeV1Post(
       update: { blockHeight, timestamp, status: "confirmed" },
     });
     console.log(`[scanner:${network}] v1 assembled REPOST ${txid}`);
+    const repostParent = await prisma.post.findFirst({
+      where: { txid: parentTxid, network: { in: ["mainnet", FREE_NETWORK] } },
+      select: { pubkey: true },
+    });
+    if (repostParent) {
+      await createNotification(
+        repostParent.pubkey,
+        pubkeyHex,
+        kind,
+        txid,
+        network,
+        timestamp,
+      );
+    }
   } else if (kind === KIND_QUOTE_REPOST) {
     if (kindData.length < 32) return;
     const parentTxid = bytesToHex(kindData.subarray(0, 32));
@@ -615,6 +724,20 @@ async function storeV1Post(
       update: { blockHeight, timestamp, status: "confirmed" },
     });
     console.log(`[scanner:${network}] v1 assembled QUOTE_REPOST ${txid}`);
+    const quoteParent = await prisma.post.findFirst({
+      where: { txid: parentTxid, network: { in: ["mainnet", FREE_NETWORK] } },
+      select: { pubkey: true },
+    });
+    if (quoteParent) {
+      await createNotification(
+        quoteParent.pubkey,
+        pubkeyHex,
+        kind,
+        txid,
+        network,
+        timestamp,
+      );
+    }
   } else if (kind === KIND_PROFILE_UPDATE) {
     if (kindData.length < 1) return;
     const propertyKind = kindData[0];
@@ -678,6 +801,16 @@ async function storeV1Post(
     console.log(
       `[scanner:${network}] v1 assembled FOLLOW ${pubkeyHex.slice(0, 8)}… -> ${targetPubkey.slice(0, 8)}… isFollow=${isFollow}`,
     );
+    if (isFollow) {
+      await createNotification(
+        targetPubkey,
+        pubkeyHex,
+        KIND_FOLLOW,
+        txid,
+        network,
+        timestamp,
+      );
+    }
   }
 }
 

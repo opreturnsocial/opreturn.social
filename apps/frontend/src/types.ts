@@ -37,6 +37,16 @@ export interface ActivityItem {
   repostCount: number;
 }
 
+export interface Notification {
+  id: number;
+  recipientPubkey: string;
+  actorPubkey: string;
+  kind: number;
+  txid: string;
+  network: string;
+  timestamp: number;
+}
+
 export type FeedItem =
   | ({ feedType: "post" } & Post)
   | ({ feedType: "activity" } & ActivityItem);

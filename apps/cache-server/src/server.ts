@@ -1043,6 +1043,57 @@ export function createServer() {
     res.json({ items: page });
   });
 
+  app.get("/notifications/:pubkey", async (req, res) => {
+    const { pubkey } = req.params;
+    const limit = Math.min(Number(req.query.limit ?? 20), 100);
+    const beforeId = req.query.before_id ? Number(req.query.before_id) : undefined;
+
+    const rows = await prisma.notification.findMany({
+      where: {
+        recipientPubkey: pubkey,
+        network: { in: ["mainnet", FREE_NETWORK] },
+        ...(beforeId !== undefined ? { id: { lt: beforeId } } : {}),
+      },
+      orderBy: [{ timestamp: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+
+    const mainnetTxids = new Set(
+      rows.filter((r) => r.network === "mainnet").map((r) => r.txid),
+    );
+    const deduped = rows.filter(
+      (r) => r.network === "mainnet" || !mainnetTxids.has(r.txid),
+    );
+
+    const hasMore = deduped.length > limit;
+    const page = deduped.slice(0, limit);
+
+    res.json({ notifications: page, hasMore });
+  });
+
+  app.get("/notifications/:pubkey/unread-count", async (req, res) => {
+    const { pubkey } = req.params;
+    const since = req.query.since ? Number(req.query.since) : 0;
+
+    const rows = await prisma.notification.findMany({
+      where: {
+        recipientPubkey: pubkey,
+        network: { in: ["mainnet", FREE_NETWORK] },
+        timestamp: { gt: since },
+      },
+      select: { txid: true, network: true },
+    });
+
+    const mainnetTxids = new Set(
+      rows.filter((r) => r.network === "mainnet").map((r) => r.txid),
+    );
+    const count = rows.filter(
+      (r) => r.network === "mainnet" || !mainnetTxids.has(r.txid),
+    ).length;
+
+    res.json({ count });
+  });
+
   app.get("/og", async (_req, res) => {
     // OG leaderboard is mainnet-only
     const grouped = await prisma.post.groupBy({

@@ -1,4 +1,4 @@
-import type { Post, Profile, ActivityItem, FeedItem } from "../types";
+import type { Post, Profile, ActivityItem, FeedItem, Notification } from "../types";
 
 const BASE_URL = import.meta.env.VITE_CACHE_SERVER_URL ?? "http://localhost:3001";
 
@@ -97,4 +97,26 @@ export async function fetchNoteOgRanks(): Promise<{ txid: string; rank: number; 
   if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
   const data = (await res.json()) as { notes: { txid: string; rank: number; timestamp: number; pubkey: string; content: string }[] };
   return data.notes;
+}
+
+export async function fetchNotifications(
+  pubkey: string,
+  limit = 20,
+  beforeId?: number,
+): Promise<{ notifications: Notification[]; hasMore: boolean }> {
+  let url = `${BASE_URL}/notifications/${pubkey}?limit=${limit}`;
+  if (beforeId !== undefined) url += `&before_id=${beforeId}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
+  return res.json() as Promise<{ notifications: Notification[]; hasMore: boolean }>;
+}
+
+export async function fetchNotificationUnreadCount(
+  pubkey: string,
+  since: number,
+): Promise<number> {
+  const res = await fetch(`${BASE_URL}/notifications/${pubkey}/unread-count?since=${since}`);
+  if (!res.ok) throw new Error(`Cache server error: ${res.status}`);
+  const data = (await res.json()) as { count: number };
+  return data.count;
 }

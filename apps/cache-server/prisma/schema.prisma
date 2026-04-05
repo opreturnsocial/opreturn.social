@@ -96,3 +96,17 @@ model PendingChunk {
 
   @@unique([txid, network])
 }
+
+model Notification {
+  id              Int    @id @default(autoincrement())
+  recipientPubkey String
+  actorPubkey     String
+  kind            Int    // 3=reply, 4=repost, 5=quote_repost, 6=follow
+  txid            String // triggering post or follow txid
+  network         String @default("mainnet")
+  timestamp       Int
+
+  @@unique([txid, network])
+  @@index([recipientPubkey, network, timestamp(sort: Desc)])
+  @@index([recipientPubkey, timestamp(sort: Desc)])
+}

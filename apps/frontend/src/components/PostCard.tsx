@@ -17,6 +17,7 @@ import { RepostModal } from "./RepostModal";
 import { TxDropdownMenu } from "./TxDropdownMenu";
 import { formatRelativeTime } from "../lib/utils";
 import { KIND_TEXT_NOTE, KIND_TEXT_REPLY, KIND_QUOTE_REPOST } from "../lib/ors";
+import { AvatarCircle } from "./AvatarCircle";
 import type { Post, Profile, ActivityItem } from "../types";
 
 type NoteOgEntry = {
@@ -42,31 +43,6 @@ interface PostCardProps {
   allProfiles?: Record<string, Profile>;
 }
 
-function AvatarCircle({
-  profile,
-  pubkey,
-}: {
-  profile?: Profile;
-  pubkey: string;
-}) {
-  if (profile?.avatarUrl) {
-    return (
-      <img
-        src={profile.avatarUrl}
-        alt={profile.name ?? pubkey.slice(0, 4)}
-        className="h-7 w-7 rounded-full object-cover border border-border flex-shrink-0"
-      />
-    );
-  }
-  const initials = profile?.name
-    ? profile.name.slice(0, 2).toUpperCase()
-    : pubkey.slice(0, 2).toUpperCase();
-  return (
-    <div className="h-7 w-7 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-      {initials}
-    </div>
-  );
-}
 
 export function PostCard({
   post,
