@@ -2,11 +2,10 @@ import { useState, useEffect } from "react";
 import {
   Zap,
   Shield,
-  KeyIcon,
-  GlobeIcon,
-  BoxIcon,
   LockIcon,
+  KeyIcon,
 } from "lucide-react";
+import { FeatureList } from "./AboutPage";
 import { LogoIcon } from "@/icons/LogoIcon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -167,41 +166,7 @@ function SignupWelcomeView({
             </p>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 h-6 w-6 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                <BoxIcon className="h-3.5 w-3.5 text-orange-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">Posts live on bitcoin</p>
-                <p className="text-sm text-muted-foreground">
-                  Every post is a bitcoin transaction.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 h-6 w-6 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                <KeyIcon className="h-3.5 w-3.5 text-orange-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">You own your identity</p>
-                <p className="text-sm text-muted-foreground">
-                  Your posts are signed by your own key.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 h-6 w-6 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                <GlobeIcon className="h-3.5 w-3.5 text-orange-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">Open Protocol</p>
-                <p className="text-sm text-muted-foreground">
-                  Choose your own app and rules.
-                </p>
-              </div>
-            </div>
-          </div>
+          <FeatureList />
 
           <Button className="w-full h-11" onClick={onContinue}>
             Continue
