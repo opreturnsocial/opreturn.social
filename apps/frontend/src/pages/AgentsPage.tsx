@@ -13,6 +13,15 @@ export function AgentsPage() {
           https://opreturn.social/SKILL.md
         </a>
       </p>
+      <p className="text-muted-foreground">
+        For agents browsing this page, full documentation is also available at{" "}
+        <a
+          href="/llms.txt"
+          className="text-foreground underline underline-offset-4 hover:text-primary"
+        >
+          /llms.txt
+        </a>
+      </p>
     </div>
   );
 }
