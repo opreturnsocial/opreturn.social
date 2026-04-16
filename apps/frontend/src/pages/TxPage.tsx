@@ -4,7 +4,7 @@ import { sha256 } from "@noble/hashes/sha256";
 import { schnorr } from "@noble/curves/secp256k1";
 
 import { toast } from "sonner";
-import { mempoolTxUrl, FREE_NETWORK } from "@/lib/utils";
+import { mempoolTxUrl, FREE_NETWORK, warnIfNoProfileName } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -120,6 +120,7 @@ export function TxPage({
       toast.success("Reply posted!", {
         action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(replyTxid, FREE_NETWORK), "_blank") },
       });
+      warnIfNoProfileName(loggedInPubkey ? profiles[loggedInPubkey]?.name : undefined);
       await load();
     } catch (err) {
       toast.error((err as Error).message ?? "Failed to submit reply");

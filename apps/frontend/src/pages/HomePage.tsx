@@ -92,6 +92,7 @@ export function HomePage({
       content={content}
       onContentChange={handleContentChange}
       pendingPost={pendingPost}
+      onEditProfile={onEditProfile}
     />
   );
 

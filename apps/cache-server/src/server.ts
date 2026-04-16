@@ -130,40 +130,59 @@ export function createServer() {
   });
 
   app.get("/posts/:txid/replies", async (req, res) => {
-    // Replies can be on any network. Mainnet replies first, then free network.
-    const replies = await prisma.post.findMany({
-      where: {
-        parentTxid: req.params.txid,
-        kind: KIND_TEXT_REPLY,
-        status: { not: "evicted" },
-        network: { in: ["mainnet", FREE_NETWORK] },
-      },
-      orderBy: [{ network: "asc" }, { blockHeight: "asc" }, { txid: "asc" }],
-    });
-    // Deduplicate: keep mainnet version when same sig exists on both networks
-    const repliesMainnetSigs = new Set(
-      replies.filter((r) => r.network === "mainnet").map((r) => r.sig),
-    );
-    const dedupedReplies = replies.filter(
-      (r) => r.network === "mainnet" || !repliesMainnetSigs.has(r.sig),
-    );
-    const dedupedTxids = dedupedReplies.map((p) => p.txid);
-    const counts = await getCountsForTxids(dedupedTxids);
-    const result: (StoredPost & {
+    const { txid } = req.params;
+    // Fetch replies with DB-level dedup (mainnet wins on same sig) and name filter
+    const replies = await prisma.$queryRaw<{
+      txid: string;
       network: string;
-      replyCount: number;
-      repostCount: number;
-    })[] = dedupedReplies.map((p) => ({
+      blockHeight: bigint;
+      timestamp: bigint;
+      content: string;
+      kind: bigint;
+      pubkey: string;
+      sig: string;
+      parentTxid: string | null;
+      status: string;
+    }[]>`
+      SELECT p.*
+      FROM "Post" p
+      WHERE p.parentTxid = ${txid}
+        AND p.kind = ${KIND_TEXT_REPLY}
+        AND p.status != 'evicted'
+        AND p.network IN ('mainnet', ${FREE_NETWORK})
+        AND NOT (
+          p.network != 'mainnet'
+          AND EXISTS (
+            SELECT 1 FROM "Post" p2
+            WHERE p2.sig = p.sig
+              AND p2.network = 'mainnet'
+              AND p2.status != 'evicted'
+          )
+        )
+        AND EXISTS (
+          SELECT 1 FROM "Profile" prof
+          WHERE prof.pubkey = p.pubkey
+            AND prof.name IS NOT NULL
+            AND prof.name != ''
+        )
+      ORDER BY p.network ASC, p.blockHeight ASC, p.txid ASC
+    `;
+    const dedupedReplies = replies.map((p) => ({
       txid: p.txid,
       network: p.network,
-      blockHeight: p.blockHeight,
-      timestamp: p.timestamp,
+      blockHeight: Number(p.blockHeight),
+      timestamp: Number(p.timestamp),
       content: p.content,
-      kind: p.kind,
+      kind: Number(p.kind),
       pubkey: p.pubkey,
       sig: p.sig,
       parentTxid: p.parentTxid,
       status: p.status,
+    }));
+    const dedupedTxids = dedupedReplies.map((p) => p.txid);
+    const counts = await getCountsForTxids(dedupedTxids);
+    const result = dedupedReplies.map((p) => ({
+      ...p,
       ...(counts[p.txid] ?? { replyCount: 0, repostCount: 0 }),
     }));
     res.json({ posts: result });
@@ -591,6 +610,18 @@ export function createServer() {
 
     const includeActivity = feedFilter === "all";
 
+    // Apply a name filter so that posts by low-effort users are not shown
+    // Only filter by profile name on the global feed (no viewer/pubkey param)
+    const nameFilter =
+      !filterPubkeys && !filterSinglePubkey
+        ? Prisma.sql`AND EXISTS (
+            SELECT 1 FROM "Profile" prof
+            WHERE prof.pubkey = p.pubkey
+              AND prof.name IS NOT NULL
+              AND prof.name != ''
+          )`
+        : Prisma.empty;
+
     if (!includeActivity) {
       // Posts-only: raw SQL with DB-level OFFSET/LIMIT and cross-network dedup via NOT EXISTS.
       // This ensures each page always fetches exactly limit+1 rows regardless of page number.
@@ -604,18 +635,20 @@ export function createServer() {
           ? Prisma.sql`AND p.pubkey = ${filterSinglePubkey}`
           : Prisma.empty;
 
-      const rawPosts = await prisma.$queryRaw<{
-        txid: string;
-        network: string;
-        blockHeight: bigint;
-        timestamp: bigint;
-        content: string;
-        kind: bigint;
-        pubkey: string;
-        sig: string;
-        parentTxid: string | null;
-        status: string;
-      }[]>`
+      const rawPosts = await prisma.$queryRaw<
+        {
+          txid: string;
+          network: string;
+          blockHeight: bigint;
+          timestamp: bigint;
+          content: string;
+          kind: bigint;
+          pubkey: string;
+          sig: string;
+          parentTxid: string | null;
+          status: string;
+        }[]
+      >`
         SELECT p.*
         FROM "Post" p
         WHERE p.status != 'evicted'
@@ -631,6 +664,7 @@ export function createServer() {
           )
           ${kindFilter}
           ${pubkeyFilter}
+          ${nameFilter}
         ORDER BY p.timestamp DESC, p.txid ASC
         LIMIT ${limit + 1} OFFSET ${offset}
       `;
@@ -672,24 +706,25 @@ export function createServer() {
         : filterSinglePubkey
           ? Prisma.sql`AND e.pubkey = ${filterSinglePubkey}`
           : Prisma.empty;
-
-      const rawItems = await prisma.$queryRaw<{
-        feedType: string;
-        activityType: string | null;
-        txid: string;
-        network: string;
-        blockHeight: bigint;
-        timestamp: bigint;
-        status: string;
-        sig: string;
-        pubkey: string;
-        content: string | null;
-        kind: bigint | null;
-        parentTxid: string | null;
-        targetPubkey: string | null;
-        propertyKind: bigint | null;
-        value: string | null;
-      }[]>`
+      const rawItems = await prisma.$queryRaw<
+        {
+          feedType: string;
+          activityType: string | null;
+          txid: string;
+          network: string;
+          blockHeight: bigint;
+          timestamp: bigint;
+          status: string;
+          sig: string;
+          pubkey: string;
+          content: string | null;
+          kind: bigint | null;
+          parentTxid: string | null;
+          targetPubkey: string | null;
+          propertyKind: bigint | null;
+          value: string | null;
+        }[]
+      >`
         SELECT
           'post'    AS feedType,
           NULL      AS activityType,
@@ -709,6 +744,7 @@ export function createServer() {
             )
           )
           ${pubkeyFilterPost}
+          ${nameFilter}
 
         UNION ALL
 
@@ -1046,7 +1082,9 @@ export function createServer() {
   app.get("/notifications/:pubkey", async (req, res) => {
     const { pubkey } = req.params;
     const limit = Math.min(Number(req.query.limit ?? 20), 100);
-    const beforeId = req.query.before_id ? Number(req.query.before_id) : undefined;
+    const beforeId = req.query.before_id
+      ? Number(req.query.before_id)
+      : undefined;
 
     const rows = await prisma.notification.findMany({
       where: {
@@ -1069,32 +1107,48 @@ export function createServer() {
     const page = deduped.slice(0, limit);
 
     // Enrich with truncated content from Post table
-    const postKinds = new Set([KIND_TEXT_REPLY, KIND_REPOST, KIND_QUOTE_REPOST]);
-    const notifTxids = page.filter((n) => postKinds.has(n.kind)).map((n) => n.txid);
-    const actorPosts = notifTxids.length > 0
-      ? await prisma.post.findMany({
-          where: { txid: { in: notifTxids } },
-          select: { txid: true, content: true, parentTxid: true },
-        })
-      : [];
+    const postKinds = new Set([
+      KIND_TEXT_REPLY,
+      KIND_REPOST,
+      KIND_QUOTE_REPOST,
+    ]);
+    const notifTxids = page
+      .filter((n) => postKinds.has(n.kind))
+      .map((n) => n.txid);
+    const actorPosts =
+      notifTxids.length > 0
+        ? await prisma.post.findMany({
+            where: { txid: { in: notifTxids } },
+            select: { txid: true, content: true, parentTxid: true },
+          })
+        : [];
     const actorPostMap = new Map(actorPosts.map((p) => [p.txid, p]));
 
-    const parentTxids = actorPosts.map((p) => p.parentTxid).filter(Boolean) as string[];
-    const parentPosts = parentTxids.length > 0
-      ? await prisma.post.findMany({
-          where: { txid: { in: parentTxids } },
-          select: { txid: true, content: true },
-        })
-      : [];
+    const parentTxids = actorPosts
+      .map((p) => p.parentTxid)
+      .filter(Boolean) as string[];
+    const parentPosts =
+      parentTxids.length > 0
+        ? await prisma.post.findMany({
+            where: { txid: { in: parentTxids } },
+            select: { txid: true, content: true },
+          })
+        : [];
     const parentPostMap = new Map(parentPosts.map((p) => [p.txid, p]));
 
     const enriched = page.map((n) => {
       const actorPost = actorPostMap.get(n.txid);
-      const parentPost = actorPost?.parentTxid ? parentPostMap.get(actorPost.parentTxid) : undefined;
+      const parentPost = actorPost?.parentTxid
+        ? parentPostMap.get(actorPost.parentTxid)
+        : undefined;
       return {
         ...n,
-        actorContent: actorPost?.content ? actorPost.content.slice(0, 100) : undefined,
-        parentContent: parentPost?.content ? parentPost.content.slice(0, 100) : undefined,
+        actorContent: actorPost?.content
+          ? actorPost.content.slice(0, 100)
+          : undefined,
+        parentContent: parentPost?.content
+          ? parentPost.content.slice(0, 100)
+          : undefined,
       };
     });
 

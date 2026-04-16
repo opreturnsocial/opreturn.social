@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { mempoolTxUrl, FREE_NETWORK } from "@/lib/utils";
+import { mempoolTxUrl, FREE_NETWORK, warnIfNoProfileName } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { submitPostFree, submitPost } from "../api/facilitator";
@@ -24,6 +24,7 @@ interface PostFormProps {
   content: string;
   onContentChange: (content: string) => void;
   pendingPost?: boolean;
+  onEditProfile?: () => void;
 }
 
 export function PostForm({
@@ -34,6 +35,7 @@ export function PostForm({
   content,
   onContentChange,
   pendingPost,
+  onEditProfile,
 }: PostFormProps) {
   const navigate = useNavigate();
   const [posting, setPosting] = useState(false);
@@ -71,6 +73,7 @@ export function PostForm({
       const sig = await signPayload(signingPayload, pubkey);
       const { txid } = await submitPostFree(content.trim(), pubkey, sig, version);
       toast.success("Posted!", { action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid, FREE_NETWORK), "_blank") } });
+      warnIfNoProfileName(profile?.name, onEditProfile);
       onContentChange("");
       onPosted();
     } catch (err) {
@@ -91,6 +94,7 @@ export function PostForm({
       const { invoice, paymentHash } = await submitPost(content.trim(), pubkey, sig, version);
       const { txid } = await payAndBroadcast(invoice, paymentHash);
       toast.success("Posted to mainnet!", { action: { label: "View on mempool", onClick: () => window.open(mempoolTxUrl(txid), "_blank") } });
+      warnIfNoProfileName(profile?.name, onEditProfile);
       onContentChange("");
       setTestnetFailed(false);
       onPosted();

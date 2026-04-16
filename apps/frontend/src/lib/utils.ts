@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { toast } from "sonner";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -20,6 +21,14 @@ export function mempoolTxUrl(txid: string, network?: string): string {
   if (network === "signet") return `https://mempool.space/signet/tx/${txid}`;
   if (network === "mutinynet") return `https://mutinynet.com/tx/${txid}`;
   return `https://mempool.space/tx/${txid}`;
+}
+
+export function warnIfNoProfileName(name: string | null | undefined, onEditProfile?: () => void) {
+  if (!name) {
+    toast.warning("This won't appear in the global feed until you set a name on your profile.", {
+      ...(onEditProfile ? { action: { label: "Update profile", onClick: onEditProfile } } : {}),
+    });
+  }
 }
 
 export function formatRelativeTime(timestamp: number): string {

@@ -40,6 +40,8 @@ On every scan cycle (after re-org check), the scanner calls `getmempoolentry` fo
 
 ## API Behavior
 
+- `GET /feed` (global, no `viewer`/`pubkey` param) - excludes posts/replies from users with no profile name set
+- `GET /posts/:txid/replies` - excludes replies from users with no profile name set
 - `GET /posts` - excludes `evicted` (returns `pending` + `confirmed`)
 - `GET /posts/:txid/replies` - excludes `evicted`
 - `GET /og` - `confirmed` only (pending posts do not count toward OG leaderboard)
